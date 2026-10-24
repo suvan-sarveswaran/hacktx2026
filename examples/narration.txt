@@ -1,0 +1,7 @@
+A leaf is a tiny solar-powered kitchen, and somehow it runs without a group chat. Its chloroplasts use light to help turn carbon dioxide into ingredients for sugar.
+
+First, light-dependent reactions happen in the thylakoid membranes. Water gets split, oxygen is released, and the plant produces ATP and NADPH. Think of those as charged batteries and a delivery service for electrons. The analogy is useful, but the plant has never paid a delivery fee.
+
+Next comes the Calvin cycle, in the fluid called the stroma. It uses ATP and NADPH to help build organic molecules from carbon dioxide. One product, G3P, can become part of sugars. The carbon in those sugars came from the air, while the released oxygen came from water.
+
+Plants also use cellular respiration to access energy stored in food. They do this in the light and in darkness. So a plant is both making food and running on it, which is considerably more productive than my relationship with the refrigerator.

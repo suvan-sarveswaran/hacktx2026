@@ -1,0 +1,21 @@
+{
+  "name": "entertainify",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Turn course text into entertaining narration and visual-ready chunks.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": "./dist/index.js",
+  "engines": { "node": ">=22.14.0" },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "start": "node --env-file-if-exists=.env dist/cli.js",
+    "test": "tsc && node --test .test-build/tests/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "~5.9.3"
+  }
+}

@@ -1,0 +1,11 @@
+Topic: How plants turn sunlight into stored energy
+
+Photosynthesis is the process by which plants, algae, and some bacteria use light energy to make energy-rich organic molecules. In plants, this process takes place in chloroplasts. Chlorophyll absorbs light, especially red and blue wavelengths, and reflects more green light, which contributes to the green appearance of leaves.
+
+Photosynthesis has two connected sets of reactions. The light-dependent reactions take place in the thylakoid membranes. Light energy drives reactions that split water and release oxygen. These reactions also produce ATP and NADPH, which carry energy and electrons to the next stage.
+
+The Calvin cycle takes place in the stroma, the fluid surrounding the thylakoids. It uses ATP and NADPH to help incorporate carbon dioxide into organic molecules. One product is G3P, a three-carbon molecule that can be used to make sugars and other compounds. The carbon in these sugars comes from carbon dioxide, while the oxygen released during the light-dependent reactions comes from water.
+
+Plants use sugars for energy and as building material. They also perform cellular respiration, including in darkness. The Calvin cycle does not directly require light, but it relies on products of the light-dependent reactions, so calling it a process that only happens at night is misleading.
+
+Learning objectives: Explain where the two stages occur, identify the origins of the carbon in sugar and the oxygen released, and distinguish photosynthesis from cellular respiration.
