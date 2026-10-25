@@ -19,6 +19,7 @@
 <p id="lessonFileStatus" class="fine-print" role="status">Uploaded lessons are saved as JSON in studio/data/lessons/.</p>
 <a id="exportLesson" class="export disabled" aria-disabled="true">Export lesson + image mapping ↗</a>
 
+<button id="buildStoryboard" class="secondary spaced" disabled>Build storyboard draft · no API credits</button><p class="fine-print">Creates independent subject-first scenes with a shared art style. Context only resolves ambiguous meanings; it is not copied into every prompt. Text cards have no percentage limit. Review and apply the JSON draft before generating. Existing custom prompts are kept.</p>
 <details id="jsonPanel" class="json-panel"><summary>View or edit lesson JSON</summary><div class="connection-body"><label for="jsonEditor">Lesson JSON</label><textarea id="jsonEditor" rows="16" spellcheck="false" placeholder="Load a lesson to inspect its JSON."></textarea><div class="json-actions"><button id="applyJson" class="secondary" disabled>Validate + apply JSON</button><button id="resetJson" class="text-button" disabled>Discard draft</button></div><p id="jsonEditorStatus" class="fine-print" role="status">Edits take effect only after validation. Opening this panel spends no credits.</p></div></details>
 
 </section>

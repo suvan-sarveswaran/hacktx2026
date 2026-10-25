@@ -28,10 +28,11 @@ export function baseImagePrompt(lesson, chunk) {
 }
 export function styledImagePrompt(lesson, chunk, style) {
   const bookkeeping = new Set(['index','text','startOffset','endOffset','wordCount','estimatedDurationSeconds','imagePrompt','image_prompt','prompt']);
+  if (['local-storyboard-v1','local-storyboard-v2','local-storyboard-v3','authored-local-refinement','custom-prompt-edit'].includes(chunk.sceneContext?.generatedBy)) bookkeeping.add('sceneContext');
   const chunkRequirements = Object.fromEntries(Object.entries(chunk).filter(([key])=>!bookkeeping.has(key)));
   const globalRequirements = Object.fromEntries(Object.entries(lesson).filter(([key])=>!['title','script','chunks','images','artStyle','imageAspect','metadata'].includes(key)));
   if(lesson.metadata && typeof lesson.metadata==='object') {
-    const useful=Object.fromEntries(Object.entries(lesson.metadata).filter(([key])=>!['model','wordCount','chunkCount','estimatedDurationSeconds','generationMs','chunkingMs'].includes(key)));
+    const useful=Object.fromEntries(Object.entries(lesson.metadata).filter(([key])=>!['model','wordCount','chunkCount','estimatedDurationSeconds','generationMs','chunkingMs','storyboard'].includes(key)));
     if(Object.keys(useful).length)globalRequirements.metadata=useful;
   }
   const requirements = `\n\nCHUNK REQUIREMENTS (JSON; follow visual constraints, do not draw field names):\n${JSON.stringify(chunkRequirements)}` +

@@ -1,3 +1,4 @@
+import { buildStoryboard } from "#storyboard";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { chunkScript } from "./chunker.js";
@@ -26,7 +27,7 @@ export function validateLessonRequest(value: unknown): LessonRequest {
 export function parseNarration(script: string, title = "Your original narration"): PipelineResult {
   const start = performance.now();
   const chunks = chunkScript(script);
-  return {
+  return buildStoryboard<PipelineResult>({
     title, script, chunks,
     metadata: {
       provider: "none", model: "none", generationMs: 0,
@@ -35,7 +36,7 @@ export function parseNarration(script: string, title = "Your original narration"
       chunkCount: chunks.length,
       estimatedDurationSeconds: Math.round(chunks.reduce((sum, chunk) => sum + chunk.estimatedDurationSeconds, 0) * 100) / 100,
     },
-  };
+  });
 }
 
 const DEMO_SCRIPT = "Meet the mitochondrion: your cell's very small, very busy power department. It takes energy stored in nutrients and helps turn it into ATP. ATP is a molecule that cells use to power many of their activities. Think of it as a rechargeable battery, except your cells do not leave it at home when they need it. Most ATP production happens along the inner mitochondrial membrane, which folds into structures called cristae. More folds mean more space for the machinery that makes ATP. Cells that need lots of energy, like muscle cells, tend to have plenty of mitochondria. So the next time you climb the stairs, thank these tiny organelles. They are doing the work, and they have never once asked for a standing desk.";

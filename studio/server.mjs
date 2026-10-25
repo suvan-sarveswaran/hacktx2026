@@ -1,3 +1,4 @@
+import { buildStoryboard } from './storyboard.mjs';
 import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
@@ -29,6 +30,7 @@ export async function createApp({ dataDir = path.join(here, 'data'), generator =
     CREATE TABLE IF NOT EXISTS project_images(project_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, prompt_hash TEXT NOT NULL, scene_id TEXT NOT NULL, PRIMARY KEY(project_id,chunk_index,prompt_hash));
     CREATE TABLE IF NOT EXISTS project_image_settings(project_id TEXT PRIMARY KEY, aspect TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS batch_image_settings(batch_id TEXT PRIMARY KEY, width INTEGER NOT NULL, height INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS batch_seed_settings(batch_id TEXT PRIMARY KEY, seed_mode TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS video_audio(job_id TEXT PRIMARY KEY, file TEXT NOT NULL);`);
   let key = initialKey.trim(), active = null, running = null;
   let voiceKey = process.env.ELEVENLABS_API_KEY?.trim() ?? '', activeVideo = null, videoRunning = null;
@@ -104,6 +106,7 @@ export async function createApp({ dataDir = path.join(here, 'data'), generator =
       try {
         const result = await generator(ordered.map(s=>s.prompt), {
           apiKey: requestKey, model: MODEL, outDir: outputDir, concurrency: 2,
+          seedMode:db.prepare('SELECT seed_mode FROM batch_seed_settings WHERE batch_id=?').get(id)?.seed_mode??'fixed',
           ...(db.prepare('SELECT width,height FROM batch_image_settings WHERE batch_id=?').get(id)??{width:1024,height:1024}), minIntervalMs: 1100, signal: controller.signal,
           onProgress: event => {
             if (Number.isInteger(event.index)) updateScene(id, event.index, event);
@@ -158,7 +161,7 @@ export async function createApp({ dataDir = path.join(here, 'data'), generator =
         await saveLessonFile(id);
         return json(res,201,getProject(id));
       }
-      const projectMatch=url.pathname.match(/^\/api\/projects\/([a-f0-9-]+)(?:\/(settings|images|map|export))?$/);
+      const projectMatch=url.pathname.match(/^\/api\/projects\/([a-f0-9-]+)(?:\/(settings|images|map|export|storyboard))?$/);
       if(projectMatch){
         const [,id,action]=projectMatch,project=getProject(id);
         if(!project)return json(res,404,{error:'Lesson not found'});
@@ -166,6 +169,14 @@ export async function createApp({ dataDir = path.join(here, 'data'), generator =
         if(req.method==='GET'&&action==='export'){
           res.setHeader('Content-Disposition',`attachment; filename="entertainify-lesson-${id}.json"`);
           return json(res,200,{...project.lesson,artStyle:project.style,imageAspect:project.imageAspect,images:project.frames.map(f=>({...f,imageUrl:f.imageUrl?origin+f.imageUrl:null}))});
+        }
+        if(req.method==='POST'&&action==='storyboard'){
+          const input=await body(req);
+          try {
+            const lesson=normalizeProjectLesson(buildStoryboard(normalizeProjectLesson(input.lesson??project.lesson)));
+            lesson.chunks.filter(c=>c.renderHint==='image').forEach(c=>styledImagePrompt(lesson,c,project.style));
+            return json(res,200,{lesson,summary:lesson.metadata.storyboard});
+          }catch(error){return json(res,400,{error:error.message});}
         }
         if(req.method==='POST'&&action==='settings'){
           if(active)return json(res,409,{error:'Stop or finish the image batch before editing its style or prompts'});
@@ -201,6 +212,7 @@ export async function createApp({ dataDir = path.join(here, 'data'), generator =
           try{
             db.prepare('INSERT INTO batches VALUES(?,?,?,?,NULL)').run(batchId,`${project.title.slice(0,65)} · ${chosen.length} lesson images`,new Date().toISOString(),'pending');
             db.prepare('INSERT INTO batch_image_settings VALUES(?,?,?)').run(batchId,project.width,project.height);
+            db.prepare('INSERT INTO batch_seed_settings VALUES(?,?)').run(batchId,project.lesson.metadata?.storyboard?.version>=3?'prompt':'fixed');
             chosen.forEach((frame,index)=>{const sceneId=randomUUID();db.prepare('INSERT INTO scenes(id,batch_id,source_index,position,prompt,status) VALUES(?,?,?,?,?,?)').run(sceneId,batchId,index,index,frame.prompt,'pending');db.prepare('INSERT OR REPLACE INTO project_images VALUES(?,?,?,?)').run(id,frame.chunkIndex,frame.promptHash,sceneId);});
             db.exec('COMMIT');
           }catch(error){db.exec('ROLLBACK');throw error;}

@@ -41,5 +41,8 @@
     "motion": "^14.6.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
+  },
+  "imports": {
+    "#storyboard": "./studio/storyboard.mjs"
   }
 }

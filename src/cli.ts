@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { buildStoryboard } from "#storyboard";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -158,7 +159,7 @@ async function main(): Promise<void> {
     });
   }
 
-  const json = `${JSON.stringify(result, null, 2)}\n`;
+  const json = `${JSON.stringify(buildStoryboard(result), null, 2)}\n`;
   if (outputPath === undefined) {
     process.stdout.write(json);
   } else {

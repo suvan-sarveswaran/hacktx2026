@@ -10,6 +10,9 @@ export interface ChunkOptions {
 
 export interface ScriptChunk extends ChunkRenderingHint {
   index: number;
+  /** Added by the local storyboard pass; narration offsets are unchanged. */
+  imagePrompt?: string;
+  sceneContext?: {sentence: string; previousSentence?: string; shot: string; generatedBy: string};
   text: string;
   /** Inclusive UTF-16 offset in the original JavaScript string. */
   startOffset: number;

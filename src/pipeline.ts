@@ -1,3 +1,4 @@
+import { buildStoryboard } from "#storyboard";
 import { chunkScript } from "./chunker.js";
 import type { ChunkOptions, ScriptChunk } from "./chunker.js";
 import { generateScript } from "./generator.js";
@@ -20,6 +21,7 @@ export interface PipelineResult {
     estimatedDurationSeconds: number;
     generationMs: number;
     chunkingMs: number;
+    storyboard?: {version:number;method:string;apiCalls:0;imageChunks:number;textChunks:number;textRatio:number;textSelection:string;scenePolicy?:string};
   };
 }
 
@@ -32,7 +34,7 @@ export async function entertainify(sourceText: string, options: PipelineOptions 
   const chunkingStart = performance.now();
   const chunks = chunkScript(script, options.chunking);
   const chunkingMs = performance.now() - chunkingStart;
-  return {
+  return buildStoryboard<PipelineResult>({
     title,
     script,
     chunks,
@@ -45,5 +47,5 @@ export async function entertainify(sourceText: string, options: PipelineOptions 
       generationMs: Math.round(generationMs * 100) / 100,
       chunkingMs: Math.round(chunkingMs * 100) / 100,
     },
-  };
+  });
 }

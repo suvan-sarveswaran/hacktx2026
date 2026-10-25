@@ -173,6 +173,14 @@ All visitors using your Groq key share the organization's free quota. Check the 
 
 An OpenAI or Grok consumer account is not a shared free backend credential for a public website. OpenAI's [Sign in with ChatGPT integration](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt) can let eligible Plus/Pro users authorize use of **their own** plan allowance. The documented local open-source/personal integration does not grant general hosted-app access; hosted or paid apps need approval through the access process. That would require a separate per-user sign-in integration, and would not pool your subscription for every visitor. This starter uses provider API keys instead.
 
+## Local storyboard planning
+
+After narration is chunked, a local storyboard pass adds an `imagePrompt` and `sceneContext` to image beats. It reads sentence context to disambiguate words, but sends an independent subject-led visual brief rather than copying whole narration sentences into each image request. A local visual vocabulary gives concepts such as atoms, pumps and coolant distinct depictions; other subjects use an isolated-object/action fallback. Shared art direction controls palette and medium, not recurring content or backgrounds. It does not call Groq, OpenAI, Pollinations or ElevenLabs. The script, chunk order, original text, offsets and timing estimates are unchanged.
+
+The pass chooses text cards for isolated fillers, quantities and weak modifiers based on significance, without a percentage cap or target. Meaningful attributes stay visual when a nearby subject in the same sentence gives them context (for example, cold water or positive charge). It preserves authored text/skip decisions and explicit custom prompts. Older automatic storyboard decisions are reassessed when a new draft is built; version-1/2 automatic prompts are upgraded to independent scene briefs. Unchanged version-3 prompts are reused. This is a transparent local heuristic, not an LLM scene writer or a historical/scientific fact check. Short pronoun-heavy or complex passages can still need authored prompts.
+
+New dashboard and CLI JSON includes this planning automatically. For older JSON in Studio, use **Build storyboard draft - no API credits**, inspect the opened JSON editor and click **Validate + apply JSON**. Previewing does not mutate the saved lesson or generate anything. Applying selects new image versions while retaining old files. Start with one or a few image tests. Cached narration can be reused when the script, voice and model are unchanged.
+
 ## Output
 
 Each result includes:

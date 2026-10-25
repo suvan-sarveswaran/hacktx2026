@@ -1,3 +1,4 @@
+import { buildStoryboard } from './storyboard.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -23,11 +24,11 @@ test('prompt aliases preserve upstream prompts; fallback uses focus, context and
 test('custom lesson and chunk metadata survive normalization and are included with explicit prompts',()=>{
  const input=fixtureLesson();input.visualRequirements={palette:['purple','cream'],character:'same leaf with round glasses'};
  input.metadata={generationMs:999,visualRules:{camera:'front view'}};
- Object.assign(input.chunks[0],{renderReason:'Show the leaf as a tiny kitchen',requirements:{mustInclude:['spoon','green apron'],mustAvoid:['photorealism']},layout:'subject centered, empty space on right'});
+ Object.assign(input.chunks[0],{renderReason:'Show the leaf as a tiny kitchen',requirements:{mustInclude:['spoon','green apron'],mustAvoid:['photorealism']},layout:'subject centered, empty space on right',sceneContext:{mustInclude:'blue wrench'}});
  const lesson=normalizeProjectLesson(input);assert.deepEqual(lesson.visualRequirements,input.visualRequirements);assert.deepEqual(lesson.chunks[0].requirements,input.chunks[0].requirements);
  assert.equal(lesson.chunks[0].renderReason,input.chunks[0].renderReason);
  const prompt=styledImagePrompt(lesson,lesson.chunks[0],'Purple pencil');
- for(const required of ['tiny kitchen','green apron','photorealism','empty space on right','round glasses','front view','spoon'])assert.ok(prompt.includes(required),required);
+ for(const required of ['tiny kitchen','green apron','photorealism','empty space on right','round glasses','front view','spoon','blue wrench'])assert.ok(prompt.includes(required),required);
  assert.ok(!prompt.includes('generationMs'));
  lesson.chunks[0].requirements={veryLong:'x'.repeat(5000)};
  assert.throws(()=>styledImagePrompt(lesson,lesson.chunks[0],'Purple pencil'),/never silently truncated/);
@@ -91,4 +92,41 @@ test('image ratios reach the provider, select separate versions, survive restart
  assert.equal((await json(base,`/api/projects/${id}/export`)).body.imageAspect,'landscape');
  await app.close();app=await createApp(options);base=await listen(app.server);assert.equal((await get()).imageAspect,'landscape');assert.equal((await get()).frames[0].sceneId,wide.frames[0].sceneId);
  await json(base,`/api/projects/${id}/settings`,{imageAspect:'square'});assert.equal((await get()).frames[0].sceneId,square.frames[0].sceneId);assert.equal(dimensions.length,2);
+});
+
+
+test('storyboard preview is free and nonmutating; applying saves planned prompts and metadata in both stores',async t=>{
+ const dataDir=await mkdtemp(path.join(tmpdir(),'entertainify-storyboard-'));let calls=0;
+ const app=await createApp({dataDir,generator:async()=>{calls++;throw new Error('Unexpected image call');},voiceGenerator:async()=>{calls++;throw new Error('Unexpected voice call');}}),base=await listen(app.server);
+ t.after(async()=>{await app.close();await rm(dataDir,{recursive:true,force:true});});
+ const created=(await json(base,'/api/projects',{lesson:fixtureLesson()})).body,id=created.id;
+ const snapshot=path.join(dataDir,'lessons',`${id}.json`),before=await readFile(snapshot,'utf8');
+ const preview=await json(base,`/api/projects/${id}/storyboard`,{lesson:created.lesson});assert.equal(preview.status,200);assert.equal(preview.body.summary.apiCalls,0);assert.equal(calls,0);
+ assert.equal(preview.body.lesson.script,created.lesson.script);assert.equal(preview.body.lesson.chunks[0].imagePrompt,created.lesson.chunks[0].imagePrompt);
+ assert.ok(preview.body.lesson.chunks[2].imagePrompt.includes('FOCAL SUBJECT:'));
+ assert.equal(await readFile(snapshot,'utf8'),before);assert.deepEqual((await json(base,`/api/projects/${id}`)).body.lesson,created.lesson);
+ const applied=await json(base,`/api/projects/${id}/settings`,{lesson:preview.body.lesson});assert.equal(applied.status,200);
+ assert.deepEqual(JSON.parse(await readFile(snapshot,'utf8')).chunks,applied.body.lesson.chunks);assert.equal(calls,0);
+});
+
+
+test('new storyboards use distinct reproducible prompt seeds, deduplicate, and resume with the same seed policy',async t=>{
+ const dataDir=await mkdtemp(path.join(tmpdir(),'entertainify-seeds-')),seeds=[],modes=[];
+ const provider=http.createServer((req,res)=>{seeds.push(new URL(req.url,'http://localhost').searchParams.get('seed'));res.writeHead(200,{'Content-Type':'image/png'});res.end(png);});
+ const upstream=await listen(provider);
+ const options={dataDir,initialKey:'sk_mock_secret',generator:(prompts,options)=>{modes.push(options.seedMode);return generateImages(prompts,{...options,baseUrl:upstream,minIntervalMs:1});}};
+ let app=await createApp(options),base=await listen(app.server);
+ t.after(async()=>{await app.close();provider.closeAllConnections();await new Promise(resolve=>provider.close(resolve));await rm(dataDir,{recursive:true,force:true});});
+ const lesson=buildStoryboard(normalizeProjectLesson(fixtureLesson()));
+ const created=(await json(base,'/api/projects',{lesson})).body;
+ const batch=(await json(base,`/api/projects/${created.id}/images`,{mode:'few',count:2})).body;
+ await until(async()=>(await json(base,`/api/batches/${batch.batchId}`)).body,b=>b.status!=='running');
+ assert.equal(seeds.length,2);assert.notEqual(seeds[0],seeds[1]);assert.deepEqual(modes,['prompt']);
+ const frames=(await json(base,`/api/projects/${created.id}`)).body.frames;
+ const repeated=await generateImages([frames[0].prompt,frames[0].prompt,frames[1].prompt],{apiKey:'sk_mock_secret',model:'black-forest-labs/flux.1-schnell',baseUrl:upstream,outDir:path.join(dataDir,'images'),seedMode:'prompt',minIntervalMs:1});
+ assert.equal(repeated.succeeded,3);assert.ok(repeated.scenes.every(s=>s.cached));assert.equal(seeds.length,2);
+ await app.close();app=await createApp(options);base=await listen(app.server);
+ assert.equal((await json(base,`/api/batches/${batch.batchId}/resume`,{})).status,202);
+ await until(async()=>(await json(base,`/api/batches/${batch.batchId}`)).body,b=>b.status!=='running');
+ assert.deepEqual(modes,['prompt','prompt']);assert.equal(seeds.length,2);
 });

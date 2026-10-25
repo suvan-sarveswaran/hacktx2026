@@ -40,13 +40,14 @@ export async function generateImages(prompts, options = {}) {
     apiKey = process.env.POLLINATIONS_API_KEY,
     model = process.env.POLLINATIONS_MODEL,
     outDir = 'generated', concurrency = 4, width = 1024, height = 1024,
-    seed = 42, maxRetries = 4, timeoutMs = 120000,
+    seed = 42, seedMode = 'fixed', maxRetries = 4, timeoutMs = 120000,
     maxJobWaitMs = 1800000, pollMs = 5000, signal, onProgress = () => {},
     // Override only for local tests or a trusted compatible gateway.
     baseUrl = 'https://gen.pollinations.ai', retryBaseMs = 1000, minIntervalMs = 1100,
   } = options;
   if (!apiKey) throw new Error('Set POLLINATIONS_API_KEY on the server');
   if (!model) throw new Error('Choose a model from https://gen.pollinations.ai/image/models and set POLLINATIONS_MODEL');
+  if (!['fixed','prompt'].includes(seedMode)) throw new Error('seedMode must be fixed or prompt');
   integer(concurrency, 'concurrency', 1, 64);
   integer(width, 'width', 64, 4096); integer(height, 'height', 64, 4096);
   integer(seed, 'seed', 0, 2147483647); integer(maxRetries, 'maxRetries', 0, 20);
@@ -66,10 +67,13 @@ export async function generateImages(prompts, options = {}) {
   let stoppedReason = null, active = 0, limit = Math.min(2, concurrency), cooldown = 0, successes = 0;
   const startedAt = new Date().toISOString();
   const settings = { model, width, height, seed, baseUrl };
-  const rows = prompts.map((prompt, index) => ({ index, prompt, status: 'pending', key: hash(JSON.stringify({ ...settings, prompt })) }));
+  const rows = prompts.map((prompt, index) => {
+    const sceneSeed=seedMode==='prompt'?parseInt(hash(prompt).slice(0,8),16)%2147483647:seed;
+    return { index, prompt, seed:sceneSeed, status:'pending', key:hash(JSON.stringify({...settings,seed:sceneSeed,prompt})) };
+  });
   const unique = [...new Map(rows.map(row => [row.key, row])).values()];
   let next = 0, writeQueue = Promise.resolve();
-  const manifest = () => ({ version: 1, startedAt, updatedAt: new Date().toISOString(), settings,
+  const manifest = () => ({ version: 1, startedAt, updatedAt: new Date().toISOString(), settings:{...settings,seedMode},
     stoppedReason, total: rows.length, unique: unique.length,
     succeeded: rows.filter(r => r.status === 'done').length,
     failed: rows.filter(r => r.status === 'failed').length, scenes: rows });
@@ -149,7 +153,7 @@ export async function generateImages(prompts, options = {}) {
     let jobId = cached?.jobId;
     let response;
     if (!jobId) {
-      const params = new URLSearchParams({ model, width: String(width), height: String(height), seed: String(seed) });
+      const params = new URLSearchParams({ model, width: String(width), height: String(height), seed: String(row.seed) });
       response = await request(`/image/${encodeURIComponent(row.prompt)}?${params}`, { image: true });
       if (response.status === 202) {
         jobId = JSON.parse(response.bytes.toString()).id;
