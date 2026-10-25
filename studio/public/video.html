@@ -1,0 +1,73 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entertainify · Lesson Studio</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/video.css"></head><body>
+
+<header><a class="brand" href="/"><span class="mark">e<span>✳</span></span>entertainify<span class="brand-sub">/ lesson studio</span></a><span class="local"><i></i> LOCAL WORKSPACE</span></header>
+
+<main><div class="intro"><div><div class="eyebrow">ONE LESSON. THE WHOLE STORY.</div><h1>From your JSON<br>to <em>the final cut.</em></h1><p>Choose a look. Make your frames. Give them a voice.</p></div><div class="model-card"><div class="eyebrow">YOUR COMPLETE WORKFLOW</div><strong>Lesson → images → voice → MP4</strong><p>FLUX.1 Schnell for images · ElevenLabs for speech<br>Free local stitching, timed to the spoken words.</p><div class="model-bottom">Save your progress · Generate only what you need</div></div></div>
+
+<div id="notice" class="notice" role="status" hidden></div>
+
+<div class="video-layout"><div class="video-inputs">
+
+<section class="panel lesson-panel"><div class="section-head"><h2><span class="step">01</span> Load one lesson</h2><button id="example" class="text-button">Load example</button></div>
+
+<div class="upload-zone"><strong>Upload lesson JSON</strong><div class="file-choice"><button id="chooseLessonFile" class="secondary" type="button">Choose JSON file</button><input id="lessonFile" type="file" accept=".json,application/json" aria-label="Lesson JSON file" hidden><span id="sourceStatus" role="status">No lesson loaded.</span></div><span>Includes the full script, chunks, and their metadata. Image prompts are optional.</span></div>
+
+<label for="projects" class="spaced">Or continue a saved lesson</label><select id="projects"><option value="">No saved lessons yet</option></select>
+
+<div id="lessonInfo" class="lesson-info"><strong>No lesson loaded</strong><span>Upload your JSON once to begin.</span></div>
+
+<a id="exportLesson" class="export disabled" aria-disabled="true">Export lesson + image mapping ↗</a>
+
+<details id="jsonPanel" class="json-panel"><summary>View or edit lesson JSON</summary><div class="connection-body"><label for="jsonEditor">Lesson JSON</label><textarea id="jsonEditor" rows="16" spellcheck="false" placeholder="Load a lesson to inspect its JSON."></textarea><div class="json-actions"><button id="applyJson" class="secondary" disabled>Validate + apply JSON</button><button id="resetJson" class="text-button" disabled>Discard draft</button></div><p id="jsonEditorStatus" class="fine-print" role="status">Edits take effect only after validation. Opening this panel spends no credits.</p></div></details>
+
+</section>
+
+<section class="panel style-panel"><div class="section-head"><h2><span class="step">02</span> Choose your art style</h2><span id="styleStatus" class="pill">ONE LOOK, EVERY FRAME</span></div>
+
+<label for="stylePreset">Starting style</label><select id="stylePreset"><option value="doodle">Minimalist doodles</option><option value="vector">Flat editorial illustration</option><option value="pencil">Colored-pencil storybook</option><option value="cinematic">Cinematic illustration</option><option value="custom">Custom art direction</option></select>
+
+<label for="imageAspect" class="spaced">Image aspect ratio</label><select id="imageAspect"><option value="landscape">Landscape · 16:9 · 1280 × 720</option><option value="square">Square · 1:1 · 1024 × 1024</option><option value="portrait">Portrait · 9:16 · 720 × 1280</option></select><p class="fine-print">Applies to newly generated images. Changing the ratio selects a separate saved version; old images remain available at their original ratio.</p>
+
+<label for="artStyle" class="spaced">Art direction applied to every image</label><textarea id="artStyle" rows="5" maxlength="1000"></textarea>
+
+<button id="saveStyle" class="secondary">Apply image settings + prompt edits</button><p class="fine-print">Style changes create new image versions; previous versions stay saved. Returning to the same style reuses matching images. Consistent character identity is best effort.</p>
+
+<details><summary>Pollinations connection <span id="imageKeyStatus" class="pill">KEY NEEDED</span></summary><div class="connection-body"><label for="imageKey">Pollinations secret key</label><div class="key-row"><input id="imageKey" type="password" autocomplete="off" placeholder="sk_…"><button id="connectImages" class="secondary">Connect</button></div><p>Kept in server memory. Generate buttons spend Pollen; connecting does not generate anything.</p></div></details>
+
+</section>
+
+<section class="panel voice-panel"><div class="section-head"><h2><span class="step">04</span> Voice + final video</h2><span id="voiceStatus" class="pill">KEY NEEDED</span></div>
+
+<label for="voiceKey">ElevenLabs API key</label><div class="key-row"><input id="voiceKey" type="password" autocomplete="off" placeholder="Your ElevenLabs key"><button id="connectVoice" class="secondary">Connect</button></div>
+
+<div class="label-row"><label for="voiceId">Voice ID</label><button id="loadVoices" class="text-button">Load available voices</button></div><input id="voiceId" value="JBFqnCBsd6RMkjVDRZzb"><select id="voices" aria-label="Available voices" hidden></select>
+
+<label for="model" class="spaced">Narration model</label><select id="model"><option value="eleven_flash_v2_5">Flash v2.5 · lower cost</option><option value="eleven_multilingual_v2">Multilingual v2 · long-form narration</option></select>
+
+<label for="format" class="spaced">Video format</label><select id="format"><option value="landscape">YouTube · 1280 × 720</option><option value="portrait">Reel · 720 × 1280</option><option value="square">Square · 1024 × 1024</option></select>
+
+<div class="voice-estimate"><span>Estimated voice credits</span><strong id="voiceEstimate">Load a lesson first</strong></div>
+
+<label class="checkbox-label"><input type="checkbox" id="fallback"> Allow text cards for missing images in a test video</label>
+
+<div class="voice-actions"><button id="audioOnly" class="secondary" disabled>Generate audio only</button><div id="renderGate" class="render-gate" tabindex="0" aria-describedby="renderReason"><button id="render" class="primary" disabled>Create MP4 <span>↗</span></button><span id="renderTooltip" class="gate-tooltip" role="tooltip">Load a lesson first.</span></div></div><p id="renderReason" class="render-reason" role="status">Load a lesson first.</p><p class="fine-print">Both use this lesson’s exact script. Creating an MP4 generates audio if needed, or reuses it for the same script, voice and model. Stitching costs no API credits.</p>
+
+</section>
+
+</div><div class="output-column"><section class="panel output-panel"><div class="section-head"><h2><span class="step">03</span> Generate your lesson images</h2><span id="imageCount" class="pill">READY WHEN YOU ARE</span></div>
+
+<div class="generation-controls"><button id="generateOne" class="secondary" disabled>Generate 1</button><div class="few-control"><input id="fewCount" type="number" min="1" max="1000" value="5" aria-label="Number of images"><button id="generateFew" class="secondary" disabled>Generate a few</button></div><button id="generateAll" class="primary" disabled>Generate all missing</button></div>
+
+<p id="imageEstimate" class="mapping-summary">Load a lesson to see image costs.</p><div id="imageProgressWrap" hidden><div class="progress-label"><span id="imageProgress"></span><button id="stopImages" class="text-button">Stop images</button></div><progress id="imageProgressBar" value="0" max="1"></progress></div>
+
+<p class="fine-print">One/few/all fills missing images in lesson order. Each finished image is linked to its own chunk automatically. Text and skip chunks do not spend Pollen.</p>
+
+<details id="legacyImages"><summary>Use images you already made</summary><div class="connection-body"><label for="imageBatch">Saved image sequence</label><div class="key-row"><select id="imageBatch"></select><button id="mapImages" class="secondary">Use in order</button></div><p>Explicitly maps this sequence to the first image chunks. Review the results; imported images may have a different art style.</p></div></details>
+
+<p id="mappingSummary" class="mapping-summary">No lesson loaded.</p><div id="mappingTable" class="lesson-gallery"><div class="mapping-empty">Upload your JSON, choose a style,<br>then generate your first frame.</div></div>
+
+</section>
+
+<section class="panel saved-video"><div class="section-head"><h2>Your audio + videos</h2><button id="refresh" class="text-button">Refresh</button></div><select id="jobs" aria-label="Saved audio and videos"><option value="">No outputs yet</option></select><div id="jobStatus" class="job-status"></div><div class="job-actions"><button id="stop" class="secondary" hidden>Stop</button><button id="retry" class="secondary" hidden>Retry · reuse saved voice</button></div><audio id="audio" controls hidden></audio><video id="video" controls playsinline preload="metadata" hidden></video><div class="downloads"><a id="downloadAudio" class="secondary" hidden>Download MP3 ↓</a><a id="download" class="secondary" hidden>Download MP4 ↓</a><a id="timeline" class="export" hidden>Cut timings ↗</a></div><p class="fine-print">Cuts start at the first spoken word of each chunk, using the voice timestamps at 30 fps. Final timing quality depends on the speech alignment.</p></section>
+
+</div></div><footer><span>ONE INPUT. ALL THE PIECES.</span><a href="/images-only">Standalone prompt sandbox ↗</a><span>Saved locally · keys stay in server memory.</span></footer></main><script src="/video.js" type="module"></script></body></html>
