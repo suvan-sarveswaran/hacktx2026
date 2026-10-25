@@ -23,3 +23,22 @@ export interface ServerHealth {
   generationConfigured: boolean;
   rendererConfigured: boolean;
 }
+
+export interface PdfProgress {
+  page: number;
+  totalPages: number;
+  progress: number;
+  message: string;
+}
+export interface PdfSource {
+  text: string;
+  pageCount: number;
+  ocrPages: number[];
+  warnings: string[];
+}
+export interface PdfJob extends PdfProgress {
+  id: string;
+  status: "reading" | "ready" | "failed";
+  result?: PdfSource;
+  error?: string;
+}

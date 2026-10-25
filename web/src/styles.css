@@ -2566,6 +2566,20 @@ textarea::placeholder {
   font-size:18px}
 }
 
+.pdf-import-status {
+  margin-top:14px;
+  padding:14px 16px;
+  border:2px solid var(--ink, #252321);
+  border-radius:5px;
+  background:#fff9e7;
+  font-size:14px;
+  line-height:1.5}
+.pdf-import-status p {margin:6px 0 0}
+.pdf-import-status summary {cursor:pointer;margin-top:8px;font-weight:600}
+.pdf-import-status ul {padding-left:18px;margin-top:8px;list-style:disc}
+.pdf-import-status li + li {margin-top:6px}
+.source-textarea:disabled {opacity:.6}
+
 @media(prefers-reduced-motion:reduce){html {
   scroll-behavior:auto}
 *,*:before,*:after {

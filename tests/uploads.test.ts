@@ -12,7 +12,7 @@ test("text uploads preserve UTF-8 source and the project's real sample file", as
 
 test("uploads reject unsupported, empty, oversized, and non-text files with useful errors", async () => {
   for (const [name, size, text, error] of [
-    ["slides.pdf", 20, "PDF", /\.txt or \.md/],
+    ["slides.pptx", 20, "slides", /\.pdf, \.txt or \.md/],
     ["notes.txt", 5, " \r\n ", /empty/],
     ["large.txt", 320_001, "small content", /too big/],
     ["long.txt", 80_001, "a".repeat(80_001), /80,000/],
@@ -21,4 +21,12 @@ test("uploads reject unsupported, empty, oversized, and non-text files with usef
   ] as const) {
     await assert.rejects(readLessonFile({ name, size, text: async () => text }), error);
   }
+});
+
+test("PDF uploads use the document reader without decoding binary data as text", async () => {
+  const file = { name: "SLIDES.PDF", size: 1024, text: async () => { throw new Error("Must not decode PDF as UTF-8"); } };
+  assert.equal(await readLessonFile(file, async () => "Clean slide text."), "Clean slide text.");
+  await assert.rejects(readLessonFile(file), /PDF reader isn't connected/);
+  await assert.rejects(readLessonFile({ ...file, size: 26 * 1024 * 1024 }, async () => ""), /25 MB/);
+  await assert.rejects(readLessonFile({ ...file, size: 0 }, async () => ""), /empty/);
 });

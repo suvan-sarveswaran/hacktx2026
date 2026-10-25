@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ArrowRight, Check, ChevronLeft, ChevronRight, Download, FileText, LoaderCircle, Pause, Play, RotateCcw, Sparkles, Upload } from "lucide-react";
 import { motion } from "motion/react";
-import type { LessonJob, LessonRequest, ServerHealth } from "../../src/web-contract";
+import type { LessonJob, LessonRequest, ServerHealth, PdfProgress, PdfSource } from "../../src/web-contract";
 import { Book, Brain, Pencil, Pixel, Spark } from "./Art";
 import { readLessonFile } from "./files";
+import { api } from "./api";
 
 const suggestions = [
   { label: "Tiny cell, big energy", text: "Teach me about mitochondria at a 7th grade level.", icon: "✳" },
@@ -35,21 +36,35 @@ export function Studio({ kind, job, busy, error, health, onGenerate, onDemo, onR
   const [dragging, setDragging] = useState(false);
   const [scriptMode, setScriptMode] = useState(false);
   const [loadingFile, setLoadingFile] = useState(false);
+  const [fileProgress, setFileProgress] = useState<PdfProgress | null>(null);
+  const [pdfInfo, setPdfInfo] = useState<Omit<PdfSource, "text"> | null>(null);
+  const fileController = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const fileVersion = useRef(0);
+  useEffect(() => () => { fileVersion.current++; fileController.current?.abort(); }, []);
   useEffect(() => { try { sessionStorage.setItem(storageKey, text); } catch { /* A blocked browser store should not prevent generation. */ } }, [storageKey, text]);
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
 
   async function loadFile(file?: File) {
     if (!file) return;
     const version = ++fileVersion.current;
+    fileController.current?.abort();
+    const controller = new AbortController();
+    fileController.current = controller;
     setFileError("");
+    setPdfInfo(null);
+    setFileProgress(null);
     setLoadingFile(true);
     try {
-      const content = await readLessonFile(file);
+      const content = await readLessonFile(file, async () => {
+        setFileProgress({ page: 0, totalPages: 0, progress: 0, message: "Uploading your PDF…" });
+        const result = await api.importPdf(file, (progress) => { if (version === fileVersion.current) setFileProgress(progress); }, controller.signal);
+        if (version === fileVersion.current) setPdfInfo(result);
+        return result.text;
+      });
       if (version !== fileVersion.current) return;
       setText(content); setFileName(file.name);
-    } catch (e) { if (version === fileVersion.current) setFileError(e instanceof Error ? e.message : "Couldn't read that file. Please try again."); }
+    } catch (e) { if (version === fileVersion.current && !controller.signal.aborted) setFileError(e instanceof Error ? e.message : "Couldn't read that file. Please try again."); }
     finally { if (version === fileVersion.current) setLoadingFile(false); }
   }
 
@@ -66,14 +81,16 @@ export function Studio({ kind, job, busy, error, health, onGenerate, onDemo, onR
     <form onSubmit={submit} className="studio-form">
       <div className="input-column">
         {kind === "upload" && <>
-          <input ref={fileInput} type="file" accept=".txt,.md,text/plain,text/markdown" className="sr-only" tabIndex={-1} aria-label="Upload lesson text" onChange={(e) => { void loadFile(e.target.files?.[0]); e.target.value = ""; }} />
+          <input ref={fileInput} type="file" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown" className="sr-only" tabIndex={-1} aria-label="Upload lesson text or PDF" onChange={(e) => { void loadFile(e.target.files?.[0]); e.target.value = ""; }} />
           <button type="button" className={`drop-zone ${dragging ? "dragging" : ""}`} disabled={loadingFile} onClick={() => fileInput.current?.click()} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); void loadFile(e.dataTransfer.files[0]); }}>
-            {loadingFile ? <LoaderCircle className="spin" size={30}/> : fileName ? <FileText size={30}/> : <Upload size={30}/>}<strong>{loadingFile ? "Reading your notes…" : fileName || "Drop your notes right here"}</strong><span>{fileName ? "Click to swap this file" : "or click to find them in that very organized folder"}</span><small>.TXT OR .MD · UP TO 80,000 CHARACTERS</small>
+            {loadingFile ? <LoaderCircle className="spin" size={30}/> : fileName ? <FileText size={30}/> : <Upload size={30}/>}<strong>{loadingFile ? "Reading your notes…" : fileName || "Drop your notes right here"}</strong><span>{loadingFile ? "Finding the good stuff, one page at a time" : fileName ? "Click to swap this file" : "textbook pages, slide PDFs, or your trusty notes"}</span><small>PDF · TXT · MD / PDF: 25 MB, 60 PAGES / 80,000 CHARACTERS</small>
           </button>
+          {loadingFile && fileProgress && <div className="pdf-import-status"><div className="flex justify-between gap-3"><span role="status" aria-live="polite">{fileProgress.message}</span><button type="button" className="text-link" onClick={() => fileController.current?.abort()}>Cancel</button></div><div className="progress-track" role="progressbar" aria-label="Reading PDF" aria-valuemin={0} aria-valuemax={100} aria-valuenow={fileProgress.progress}><div style={{ width: `${Math.max(2, fileProgress.progress)}%` }}/></div><p className="input-note">Scanned pages take a little longer. Keep this panel open while we read.</p></div>}
+          {!loadingFile && pdfInfo && <div className="pdf-import-status" role="status"><strong>✓ {pdfInfo.pageCount} {pdfInfo.pageCount === 1 ? "page" : "pages"} unpacked{pdfInfo.ocrPages.length ? ` · ${pdfInfo.ocrPages.length} read with OCR` : ""}.</strong><p>Review and edit the source text below, then make your lesson.</p>{pdfInfo.warnings.length > 0 && <details><summary>A few things to check ({pdfInfo.warnings.length})</summary><ul>{pdfInfo.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}</div>}
           <div className="or-divider"><span>OR PASTE THE GOOD STUFF</span></div>
         </>}
         <div className="flex justify-between gap-3 mb-2"><label htmlFor="lesson-text" className="eyebrow">{kind === "scratch" ? "WHAT ARE WE LEARNING?" : "YOUR SOURCE TEXT"}</label><span className="text-counter">{wordCount.toLocaleString()} words</span></div>
-        <textarea id="lesson-text" className={kind === "scratch" ? "topic-textarea" : "source-textarea"} required maxLength={80_000} value={text} onChange={(e) => { setText(e.target.value); setFileName(""); setFileError(""); }} placeholder={kind === "scratch" ? "Teach me about mitochondria at a 7th grade level. Make it feel like the world's tiniest office…" : "Chapter 4: The incredibly important thing you almost fell asleep reading…"} />
+        <textarea id="lesson-text" className={kind === "scratch" ? "topic-textarea" : "source-textarea"} required disabled={loadingFile} maxLength={80_000} value={text} onChange={(e) => { setText(e.target.value); setFileName(""); setFileError(""); }} placeholder={kind === "scratch" ? "Teach me about mitochondria at a 7th grade level. Make it feel like the world's tiniest office…" : "Chapter 4: The incredibly important thing you almost fell asleep reading…"} />
         <div className="flex justify-between items-center mt-2 gap-3"><span className="input-note">{kind === "scratch" ? "A topic, a question, a wildly specific curiosity." : "A short chapter or a few pages works best."}</span><span className="text-counter">{text.length.toLocaleString()} / 80,000</span></div>
         {kind === "scratch" ? <div className="suggestions"><span className="handwriting">or borrow a little inspiration ↴</span>{suggestions.map((s) => <button type="button" key={s.label} onClick={() => setText(s.text)}><span>{s.icon}</span>{s.label}<ArrowRight size={14}/></button>)}</div> : <label className="script-checkbox"><input type="checkbox" checked={scriptMode} onChange={(e) => setScriptMode(e.target.checked)}/><span>I already have a narration script. Keep my words.<small>Skips AI writing and splits your script into scenes.</small></span></label>}
       </div>

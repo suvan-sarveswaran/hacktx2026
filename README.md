@@ -16,7 +16,7 @@ npm run dev
 
 Open **http://127.0.0.1:3000**. On PowerShell, use `npm.cmd` if needed. Both the API and Vite share this address. The existing CLI commands still work unchanged.
 
-- **Upload text:** choose or drop a UTF-8 `.txt` / `.md` file, or paste course material. AI writes the narration and the existing chunker creates the visual plan.
+- **Upload material:** choose or drop a `.pdf`, UTF-8 `.txt` / `.md` file, or paste course material. PDFs become editable source text first; AI then writes the narration and the existing chunker creates the visual plan.
 - **Existing narration:** check “I already have a narration script” to keep the original words and run the local chunker without any AI request.
 - **From scratch:** describe a topic and choose an audience and approximate runtime. A topic-specific prompt teaches from general knowledge rather than treating the request as source evidence.
 - **Sample lesson:** a clearly marked, prewritten mitochondria lesson demonstrates real scene splitting without an API key or renderer.
@@ -35,7 +35,17 @@ The frontend is in `web/`; the HTTP server and integration are in `src/server.ts
 
 The video stage is intentionally a separate adapter for your partner's pipeline. Set `VIDEO_RENDERER_URL` in `.env` when that service is ready, then restart the server. Without it, the app honestly stops at “script & scene plan ready.” See **[the video pipeline merge guide](docs/video-pipeline.md)** for the exact endpoints, status shape, and in-process integration option. No reformatting of existing lesson JSON is needed.
 
-The local server binds to `127.0.0.1` by default. It applies a 400 KB request-body limit, 80,000-character source cap, three concurrent jobs, and ten job requests per minute per socket IP. These are demo safeguards, not a public authentication system. Before hosting publicly, add user authentication, durable job storage, and deployment-aware rate limits. Provider keys and the optional renderer token remain on the server.
+The local server binds to `127.0.0.1` by default. It applies a 400 KB JSON request-body limit, 25 MB PDF limit, 80,000-character source cap, three concurrent lesson jobs, two concurrent PDF imports, and ten creation requests per minute per socket IP. These are demo safeguards, not a public authentication system. Before hosting publicly, add user authentication, durable job storage, and deployment-aware rate limits. Provider keys and the optional renderer token remain on the server.
+
+### Textbook and slideshow PDFs
+
+Upload a PDF in the existing text panel. The studio shows page-by-page progress, then places the extracted text in the editable source field. Review it and generate the lesson as usual. PowerPoint files should be exported as PDF first. The CLI still accepts text files.
+
+The server uses PDF.js to read digital text in spatial order, including textbook columns, headings, and slide bullets. It cleans line wrapping, ligatures, and repeated text in page margins. Pages containing images, scans, or rotated text are rendered and read with local Tesseract OCR. Mixed pages retain their digital text and add readable text from figures. PDF fonts, character maps, and English OCR data are bundled with the dependencies; PDF extraction requires no AI key, network download, or external document service.
+
+Limits are **25 MB, 60 pages, and 80,000 extracted characters**. Oversized sources are rejected instead of silently truncated. Imports run in separate workers with a ten-minute limit. Canceling or closing the panel stops the import; completed server source text is removed once retrieved by the browser. Abandoned imports expire after an hour and at most 20 import jobs are retained. Files are processed in memory, without saving uploads to disk.
+
+No extractor can guarantee perfect text from every PDF. Digital text can include Unicode; OCR currently supports **English**. Blurry scans, handwriting, equations, and diagrams may need corrections or a short explanation in the preview. The app flags uncertain OCR and pages without readable text. Password-protected PDFs need an unlocked export. The original PDF never goes to the writing provider; only the reviewed source text is submitted when you generate a lesson.
 
 ## Setup
 
@@ -224,7 +234,7 @@ Chunks are typically 1–5 words. The default safety limit is **8 words per chun
 
 Generic verbs such as “use” and “help” attach to adjacent content when possible, within the same sentence and the word limit. This avoids unnecessary fragments such as `"use"`, `"light to"`, and `"help"`, combining them into `"use light to help"`. If a fragment still has no clear visual focus, its text hint lets the video display the words instead.
 
-PDF/slideshow parsing, image prompt generation, image generation, voice synthesis, and video assembly are separate stages. The dashboard accepts exported text and has a ready-to-connect video renderer adapter; it does not implement your partner's image/audio/video pipeline.
+PDF/slideshow extraction is included in the dashboard. Image prompt generation, image generation, voice synthesis, and video assembly remain separate stages connected through the video renderer adapter; the partner's image/audio/video pipeline and its lesson JSON contract are unchanged.
 
 ## Checks
 

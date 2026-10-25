@@ -1,4 +1,4 @@
-import type { LessonJob, LessonRequest, ServerHealth } from "../../src/web-contract";
+import type { LessonJob, LessonRequest, ServerHealth, PdfJob, PdfSource, PdfProgress } from "../../src/web-contract";
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) { super(message); }
@@ -14,6 +14,29 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  importPdf: async (file: File, onProgress: (progress: PdfProgress) => void, signal: AbortSignal): Promise<PdfSource> => {
+    let id: string | undefined;
+    try {
+      let job = await request<PdfJob>("/api/documents", { method: "POST", headers: { "Content-Type": "application/pdf" }, body: file, signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]) });
+      id = job.id;
+      while (job.status === "reading") {
+        onProgress(job);
+        await new Promise<void>((resolve, reject) => {
+          const abort = () => { clearTimeout(timer); reject(signal.reason); };
+          const timer = setTimeout(() => { signal.removeEventListener("abort", abort); resolve(); }, 700);
+          signal.addEventListener("abort", abort, { once: true });
+          if (signal.aborted) { signal.removeEventListener("abort", abort); abort(); }
+        });
+        job = await request<PdfJob>(`/api/documents/${id}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]) });
+      }
+      if (job.status === "failed" || !job.result) throw new Error(job.error ?? "This PDF couldn't be read. Try exporting it again.");
+      onProgress(job);
+      return job.result;
+    } finally {
+      // Remove the temporary source text, or stop OCR when the user cancels/leaves.
+      if (id) void request(`/api/documents/${id}`, { method: "DELETE" }).catch(() => {});
+    }
+  },
   health: () => request<ServerHealth>("/api/health"),
   create: (body: LessonRequest) => request<LessonJob>("/api/lessons", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   demo: () => request<LessonJob>("/api/demo", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }),

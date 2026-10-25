@@ -25,6 +25,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "pdf-lib": "^1.17.1",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "~5.9.3",
@@ -34,10 +35,14 @@
     "@fontsource/bricolage-grotesque": "^5.3.0",
     "@fontsource/caveat": "^5.3.0",
     "@fontsource/space-mono": "^5.3.0",
+    "@napi-rs/canvas": "^1.0.13",
+    "@tesseract.js-data/eng": "^1.0.0",
     "compromise": "14.19.0",
     "lucide-react": "^1.61.0",
     "motion": "^14.6.0",
+    "pdfjs-dist": "^6.4.299",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "tesseract.js": "^7.0.0"
   }
 }

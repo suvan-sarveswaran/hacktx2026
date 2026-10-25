@@ -103,9 +103,16 @@ Pass this renderer when creating `LessonService` in `src/server.ts`. `LessonServ
 
 ## Dashboard API
 
+PDF import is a preprocessing step: `POST /api/documents` (raw bytes, `Content-Type: application/pdf`) → poll `GET /api/documents/:id` → review `result.text` → the existing `POST /api/lessons` with `mode: "material"`. **The renderer still receives exactly the same `PipelineResult`; it does not receive PDF bytes or extraction metadata.** No partner-side changes are required.
+
+Document jobs have `status: "reading" | "ready" | "failed"`, `progress`, `page`, `totalPages`, and a readable `message`. Ready jobs include `result: { text, pageCount, ocrPages, warnings }`. Failed jobs include `error`. `DELETE /api/documents/:id` cancels processing and releases temporary text; the browser calls it after retrieving a result or when leaving/canceling. Imports are bounded to 25 MB, 60 pages, 80,000 characters, two concurrent workers, and ten minutes each. PDF.js and local English OCR handle extraction without using the writing provider.
+
 | Route | Purpose |
 | --- | --- |
 | `GET /api/health` | Boolean AI/renderer configuration flags only. |
+| `POST /api/documents` | Raw PDF upload; returns HTTP 202 and an import job. |
+| `GET /api/documents/:id` | Page progress, extracted source text, and review warnings. |
+| `DELETE /api/documents/:id` | Cancel/discard a temporary PDF import. |
 | `POST /api/lessons` | `{ text, mode, audience, targetWords }`; returns HTTP 202 and a job. |
 | `GET /api/lessons/:id` | Current status, progress, lesson result when ready, video URL when complete. |
 | `GET /api/lessons/:id/json` | Downloads the exact existing `PipelineResult`. |
@@ -119,4 +126,4 @@ The browser remembers the active job ID across refreshes in the same tab and con
 
 ## Checks
 
-`npm test` includes contract validation, exact JSON handoff, renderer progress/completion/failure, timeout handling, topic-mode forwarding, sample isolation, concurrency limits, and HTTP request/download tests. Tests use mocks or local requests; they do not consume provider quota.
+`npm test` includes contract validation, exact JSON handoff, renderer progress/completion/failure, timeout handling, topic-mode forwarding, sample isolation, concurrency limits, and HTTP request/download tests. PDF tests generate real multi-column textbook pages, landscape slides, image-only scans, mixed pages, and sideways scans, then verify text extraction and the unchanged renderer handoff. Tests use local OCR, mocks, or local requests; they do not consume provider quota.
