@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import ffmpeg from '@ffmpeg-installer/ffmpeg';
 import { createTextCard } from './text-cards.mjs';
-import { captionedFrame, createRunnerPlaceholder } from './short-form.mjs';
+import { captionedFrame } from './short-form.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 export const DEFAULT_VOICE_MODEL = 'eleven_flash_v2_5';
@@ -153,10 +153,14 @@ export function wavDuration(bytes) {
   if (!rate || !data) throw new Error('WAV has no usable audio samples.');
   return data / rate;
 }
-export async function renderVideo({ lesson, alignment, audioPath, mapping = {}, fallbackText = false, requireImageMajority = false, cutMode = 'chunk', artStyle = '', textStyle = 'auto', brainrot = false, gameplayPath, captions = false, width = 1280, height = 720, fps = 30, outputDir, signal, onProgress = () => {} }) {
+export async function renderVideo({ lesson, alignment, audioPath, mapping = {}, fallbackText = false, requireImageMajority = false, cutMode = 'chunk', artStyle = '', textStyle = 'auto', brainrot = false, gameplayPath, gameplaySource, captions = true, width = 1280, height = 720, fps = 30, outputDir, signal, onProgress = () => {} }) {
   validateLesson(lesson); characterTimings(lesson.script, alignment);
   if (![[1280,720],[720,1280],[1024,1024],[640,360]].some(([w,h])=>width===w&&height===h)) throw new Error('Unsupported render dimensions.');
   if (brainrot && (width !== 720 || height !== 1280)) throw new Error('Split-screen videos must be 720 × 1280.');
+  if (brainrot && !gameplayPath) {
+    gameplayPath = path.resolve('subway_surfers.mp4'); gameplaySource = 'subway-surfers';
+    await stat(gameplayPath).catch(() => { throw new Error('The default Subway Surfers clip is missing. Upload a gameplay MP4.'); });
+  }
   const visualHeight = brainrot ? height / 2 : height;
   await mkdir(outputDir, { recursive: true });
   onProgress('Decoding narration');
@@ -198,12 +202,12 @@ export async function renderVideo({ lesson, alignment, audioPath, mapping = {}, 
     concat.push(`file '${segments.get(identity)}'`);
   }
   await writeFile(path.join(outputDir,'frames.ffconcat'),concat.join('\n')+'\n');
-  timeline.layout = { width, height, visualHeight, captions, brainrot, gameplay: brainrot ? gameplayPath ? 'uploaded' : 'placeholder' : null };
+  timeline.layout = { width, height, visualHeight, captions, brainrot, gameplay: brainrot ? (gameplaySource ?? 'uploaded') : null };
   await atomicJson(path.join(outputDir,'timeline.json'),timeline);
   onProgress('Encoding MP4');
   if (brainrot) {
-    const clip = gameplayPath ?? await createRunnerPlaceholder(outputDir, runFfmpeg, signal);
-    await runFfmpeg(['-f','concat','-safe','0','-i','frames.ffconcat','-stream_loop','-1','-protocol_whitelist','file,pipe','-i',clip,'-i','audio.wav',
+    const clip = gameplayPath;
+    await runFfmpeg(['-f','concat','-safe','0','-i','frames.ffconcat','-stream_loop','-1','-protocol_whitelist','file,pipe','-f','mov','-i',clip,'-i','audio.wav',
       '-filter_complex',`[0:v]setpts=PTS-STARTPTS,setsar=1,fps=${fps}[top];[1:v]setpts=PTS-STARTPTS,scale=${width}:${visualHeight}:force_original_aspect_ratio=increase,crop=${width}:${visualHeight},setsar=1,fps=${fps}[bottom];[top][bottom]vstack=inputs=2:shortest=1[v]`,
       '-map','[v]','-map','2:a:0','-c:v','libx264','-preset','fast','-crf','20','-pix_fmt','yuv420p','-r',String(fps),'-c:a','aac','-b:a','128k','-af','apad','-t',String(timeline.totalFrames/fps),'-movflags','+faststart','video.mp4'], {cwd:outputDir,signal});
   } else await runFfmpeg(['-f','concat','-safe','0','-i','frames.ffconcat','-i','audio.wav','-map','0:v:0','-map','1:a:0',

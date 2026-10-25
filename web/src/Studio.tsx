@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ArrowRight, FileText, LoaderCircle, Upload } from "lucide-react";
 import type { LessonFormat, LessonJob, LessonRequest, PdfProgress, PdfSource } from "../../src/web-contract";
-import { Book, Pencil, Spark } from "./Art";
+import { Book, Phone, Pencil, Spark } from "./Art";
 import { readLessonFile } from "./files";
 import { api } from "./api";
-import { ApiKeyField, Production } from "./Production";
+import { Production } from "./Production";
+import { ApiKeyField, useApiKey } from "./ApiKeys";
 
 interface StudioProps {
   kind: LessonFormat; job: LessonJob | null; busy: boolean; restoring: boolean; error: string; visible: boolean;
@@ -23,9 +24,9 @@ export function Studio({ kind, job, busy, restoring, error, visible, onGenerate,
   const [fileName, setFileName] = useState<string>(draft.fileName ?? "");
   const [inputMode, setInputMode] = useState<"topic" | "material">(draft.inputMode === "material" ? "material" : "topic");
   const [scriptMode, setScriptMode] = useState(draft.scriptMode === true && kind !== "comic");
-  const [brainrot, setBrainrot] = useState(draft.brainrot === true);
+  const [brainrot, setBrainrot] = useState(draft.brainrot !== false);
   const [comicPanels, setComicPanels] = useState<4 | 6 | 8>([4, 6, 8].includes(draft.comicPanels) ? draft.comicPanels : 6);
-  const [groqKey, setGroqKey] = useState("");
+  const [groqKey, setGroqKey] = useApiKey("Groq");
   const [fileError, setFileError] = useState("");
   const [dragging, setDragging] = useState(false);
   const [loadingFile, setLoadingFile] = useState(false);
@@ -54,13 +55,13 @@ export function Studio({ kind, job, busy, restoring, error, visible, onGenerate,
   async function submit(event: FormEvent) {
     event.preventDefault(); if (!text.trim() || loadingFile) return;
     const created = await onGenerate({ text, mode: scriptMode ? "script" : inputMode, audience, targetWords, format: kind, brainrot: kind === "short" && brainrot, ...(kind === "comic" ? { comicPanels } : {}), ...(groqKey.trim() ? { apiKey: groqKey } : {}) });
-    if (created) { setGroqKey(""); setText(""); setFileName(""); setPdfInfo(null); setFileError(""); setInputMode("topic"); setScriptMode(false); }
+    if (created) { setText(""); setFileName(""); setPdfInfo(null); setFileError(""); setInputMode("topic"); setScriptMode(false); }
   }
   if (job) return <div className="studio-content"><Production key={job.id} job={job} visible={visible} onUpdate={onUpdate} onReset={onReset} connectionError={error} onRetryConnection={onRetryConnection}/></div>;
   if (restoring && error) return <div className="studio-content"><div className="error-box" role="alert">{error}<button className="ink-button" onClick={onRetryConnection}>Retry loading this lesson</button></div><button className="text-link" onClick={onReset}>Start a new lesson</button></div>;
   if (busy) return <div className="studio-content"><div className="production-status" role="status"><LoaderCircle className="spin"/> Opening your saved lesson…</div></div>;
   return <div className="studio-content">
-    <div className="studio-heading"><div><span className="eyebrow">{names[kind].toUpperCase()} / YOUR NEXT AHA</span><h1>{kind === "comic" ? <>A little ink.<br/><span>A big idea.</span></> : kind === "short" ? <>Small screen.<br/><span>Big brain energy.</span></> : <>A boring chapter.<br/><span>A better story.</span></>}</h1><p>{kind === "comic" ? "From a question or your notes to a story you can read, one thoughtful frame at a time." : "Upload your notes or describe what you want to learn. We’ll find the story, the punchlines, and the part that clicks."}</p></div>{kind === "comic" ? <Pencil className="studio-art"/> : <Book className="studio-art"/>}</div>
+    <div className="studio-heading"><div><span className="eyebrow">{names[kind].toUpperCase()} / YOUR NEXT AHA</span><h1>{kind === "comic" ? <>A little ink.<br/><span>A big idea.</span></> : kind === "short" ? <>Small screen.<br/><span>Big brain energy.</span></> : <>A boring chapter.<br/><span>A better story.</span></>}</h1><p>{kind === "comic" ? "From a question or your notes to a story you can read, one thoughtful frame at a time." : "Upload your notes or describe what you want to learn. We’ll find the story, the punchlines, and the part that clicks."}</p></div>{kind === "comic" ? <Pencil className="studio-art"/> : kind === "short" ? <Phone className="studio-art"/> : <Book className="studio-art"/>}</div>
     <form onSubmit={submit} className="studio-form"><div className="input-column">
       <input ref={fileInput} type="file" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown" className="sr-only" tabIndex={-1} aria-label={`Upload ${names[kind]} source`} onChange={e => { void loadFile(e.target.files?.[0]); e.target.value = ""; }}/>
       <button type="button" className={`drop-zone ${dragging ? "dragging" : ""}`} disabled={loadingFile} onClick={() => fileInput.current?.click()} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={e => { e.preventDefault(); setDragging(false); void loadFile(e.dataTransfer.files[0]); }}>
@@ -78,7 +79,7 @@ export function Studio({ kind, job, busy, restoring, error, visible, onGenerate,
     </div><aside className="recipe-card"><span className="eyebrow">YOUR LESSON RECIPE</span><div className="recipe-doodle"><Spark className="w-10"/><span className="handwriting">one order of “ohhh, I get it”</span></div>
       <label htmlFor={`${kind}-audience`}>Who’s {kind === "comic" ? "reading" : "watching"}?</label><select id={`${kind}-audience`} value={audience} onChange={e => setAudience(e.target.value)} disabled={scriptMode}><option>Curious beginners (all ages)</option><option>Middle school students (grades 6–8)</option><option>High school students (grades 9–12)</option><option>College students</option></select>
       {kind === "comic" ? <><label htmlFor={`${kind}-panels`}>How many panels?</label><select id={`${kind}-panels`} value={comicPanels} onChange={e => setComicPanels(Number(e.target.value) as 4 | 6 | 8)}><option value={4}>4 panels · a quick idea</option><option value={6}>6 panels · the sweet spot</option><option value={8}>8 panels · a little more story</option></select><p className="input-note">One clear idea per frame. Legible captions, added after the illustrations.</p></> : <><label htmlFor={`${kind}-length`}>How much story?</label><select id={`${kind}-length`} value={targetWords} onChange={e => setTargetWords(Number(e.target.value))} disabled={scriptMode}>{lengths.map(words => <option key={words} value={words}>{words === 75 ? "A tiny story · ~30 seconds" : `${words / 150} minute${words === 150 ? "" : "s"} · ~${words} words`}</option>)}</select><p className="input-note">{kind === "youtube" ? "YouTube · 16:9 landscape" : "Short-form · 9:16 portrait"}. Timing follows the narration.</p></>}
-      {kind === "short" && <div className="gameplay-option"><label className="script-checkbox"><input type="checkbox" checked={brainrot} onChange={e => setBrainrot(e.target.checked)}/><span>Add a brainrot clip<small>Lesson + captions on top. Gameplay below.</small></span></label><div className={`format-preview ${brainrot ? "split" : ""}`}><span>YOUR LESSON + CAPTIONS</span>{brainrot && <span>RUNNER PLACEHOLDER</span>}</div><p className="input-note">{brainrot ? "A local runner animation is included. Upload your Subway Surfers MP4 in the final-cut step to replace it." : "Your visuals fill the whole screen."}</p></div>}
+      {kind === "short" && <div className="gameplay-option"><label className="script-checkbox"><input type="checkbox" checked={brainrot} onChange={e => setBrainrot(e.target.checked)}/><span>Add a brainrot clip<small>Lesson + captions on top. Gameplay below.</small></span></label><div className={`format-preview ${brainrot ? "split" : ""}`}><span>YOUR LESSON + CAPTIONS</span>{brainrot && <span>SUBWAY SURFERS</span>}</div><p className="input-note">{brainrot ? "Subway Surfers is ready to go. It loops silently below your lesson; you can swap the clip in the final-cut step." : "Your visuals fill the whole screen."}</p></div>}
       <div className="recipe-style"><span className="eyebrow">THE HOUSE STYLE</span><p>Little doodles.<br/>Dry humor.<br/>Actual learning.</p><span className="style-stamp">100% LESS ZZZ</span></div>
       {!scriptMode && <ApiKeyField provider="Groq" value={groqKey} onChange={setGroqKey}/>}
       <button type="submit" className="ink-button primary" disabled={!text.trim() || loadingFile || (!scriptMode && !groqKey.trim())}>{kind === "comic" ? "Plan my comic" : "Write my story"}<ArrowRight size={19}/></button>

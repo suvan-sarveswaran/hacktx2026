@@ -16,9 +16,9 @@ export function resolveTextTheme(artStyle = '', textStyle = 'auto') {
 }
 
 /** Measure actual glyph widths, keeping long words and portrait cards inside safe margins. */
-export function textLayout(ctx, text, width, height, font) {
-  const words = text.trim().replace(/\s+/gu, ' ').split(' '), maxWidth = width * .78, maxHeight = height * .67;
-  for (let size = Math.round(Math.min(width * .115, height * .17)); size >= 8; size--) {
+export function textLayout(ctx, text, width, height, font, options = {}) {
+  const words = text.trim().replace(/\s+/gu, ' ').split(' '), maxWidth = options.maxWidth ?? width * .78, maxHeight = options.maxHeight ?? height * .67;
+  for (let size = Math.round(options.maxFontSize ?? Math.min(width * .115, height * .17)); size >= 8; size--) {
     ctx.font = `bold ${size}px ${font}`;
     const lines = []; let line = '';
     for (const word of words) {
@@ -33,7 +33,7 @@ export function textLayout(ctx, text, width, height, font) {
       } else line = `${line} ${word}`.trim();
     }
     if (line) lines.push(line);
-    const lineHeight = size * 1.3;
+    const lineHeight = size * (options.lineSpacing ?? 1.3);
     if (lines.length * lineHeight <= maxHeight) return { size, lines, lineHeight, maxWidth };
   }
   throw new Error('Text card is too long to fit. Shorten the on-screen caption.');

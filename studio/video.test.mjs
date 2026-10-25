@@ -94,6 +94,12 @@ test('real FFmpeg MP4 has 60 frames with exact red → text → blue cut frames'
  const audioPath=path.join(dir,'input.wav');await writeFile(audioPath,wav());assert.equal(wavDuration(wav()),2);
  for(const color of ['red','blue'])await runFfmpeg(['-f','lavfi','-i',`color=c=${color}:s=640x360:d=1`,'-frames:v','1',`${color}.png`],{cwd:dir});
  const rendered=await renderVideo({lesson,alignment,audioPath,mapping:{0:path.join(dir,'red.png'),2:path.join(dir,'blue.png')},width:640,height:360,outputDir:dir});
+ assert.equal(rendered.timeline.layout.captions,true,'long-form image scenes have captions by default');
+ const captionImage=await loadImage(await readFile(path.join(dir,rendered.timeline.scenes[0].frameFile)));
+ const captionContext=createCanvas(640,360).getContext('2d');captionContext.drawImage(captionImage,0,0);
+ const captionPixels=captionContext.getImageData(0,270,640,90).data;
+ let inkPixels=0;for(let i=0;i<captionPixels.length;i+=4)if(captionPixels[i]<100&&captionPixels[i+1]<100&&captionPixels[i+2]<100)inkPixels++;
+ assert.ok(inkPixels>40,'caption band contains rendered, legible lettering');
  assert.ok((await stat(rendered.file)).size>1000);
  await runFfmpeg(['-i','video.mp4','-map','0:v:0','-f','framemd5','frames.md5'],{cwd:dir});
  const rows=(await readFile(path.join(dir,'frames.md5'),'utf8')).split('\n').filter(l=>l&&!l.startsWith('#')).map(l=>l.split(',').at(-1).trim());
@@ -131,11 +137,11 @@ test('short-form exports portrait video with captions, a looping silent lower cl
  }
 });
 
-test('default split-screen runner is animated and renders without an external clip', async t => {
+test('default split-screen Subway Surfers clip is animated and renders with muted gameplay', async t => {
  const dir=await mkdtemp(path.join(tmpdir(),'entertainify-placeholder-'));t.after(()=>rm(dir,{recursive:true,force:true}));
  const lesson=lessonOf(['A leaf.']);const audioPath=path.join(dir,'input.wav');await writeFile(audioPath,wav(2));
  const rendered=await renderVideo({lesson,alignment:alignmentOf(lesson.script,.1),audioPath,fallbackText:true,width:720,height:1280,brainrot:true,captions:true,outputDir:dir});
- assert.equal(rendered.timeline.layout.gameplay,'placeholder');
+ assert.equal(rendered.timeline.layout.gameplay,'subway-surfers');
  await runFfmpeg(['-i','video.mp4','-map','0:v:0','-vf','crop=720:640:0:640','-f','framemd5','runner.md5'],{cwd:dir});
  const hashes=(await readFile(path.join(dir,'runner.md5'),'utf8')).split('\n').filter(l=>l&&!l.startsWith('#')).map(l=>l.split(',').at(-1).trim());
  assert.equal(hashes.length,60);assert.ok(new Set(hashes).size>10);

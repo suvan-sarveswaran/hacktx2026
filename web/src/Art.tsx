@@ -2,6 +2,10 @@ import { useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { RotateCcw } from "lucide-react";
 
+export function Phone({ className = "" }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 170 200" fill="none" aria-hidden="true"><g transform="rotate(9 85 100)"><rect x="41" y="12" width="96" height="176" rx="17" fill="#302743"/><rect x="34" y="8" width="96" height="176" rx="17" fill="#fffaf0" stroke="#302743" strokeWidth="4"/><rect x="43" y="26" width="78" height="137" rx="6" fill="#c8d8ee" stroke="#302743" strokeWidth="2"/><path d="m72 46 25 16-25 16Z" fill="#ef9c82" stroke="#302743" strokeWidth="3" strokeLinejoin="round"/><path d="M56 90h51M62 98h39" stroke="#302743" strokeWidth="3" strokeLinecap="round"/><path d="M43 110h78v47a6 6 0 0 1-6 6H49a6 6 0 0 1-6-6Z" fill="#d0dfb9"/><path d="m70 113-16 50m40-50 16 50m-28-50v50" stroke="#8c9c76" strokeWidth="3"/><circle cx="82" cy="139" r="8" fill="#f5dfa3" stroke="#302743" strokeWidth="2"/><path d="M70 18h24M77 173h10" stroke="#302743" strokeWidth="3" strokeLinecap="round"/></g><path d="m16 41 5 11 12 2-11 5-2 12-5-11-12-2 11-5Z" fill="#ef9c82" stroke="#302743" strokeWidth="2"/></svg>;
+}
+
 export function Spark({ className = "" }: { className?: string }) {
   return <svg className={className} viewBox="0 0 80 80" fill="none" aria-hidden="true"><path d="M40 3 47 29 73 18 56 39 77 51 50 51 48 77 35 55 13 72 24 46 2 37 30 31Z" fill="currentColor" stroke="#28271f" strokeWidth="2.5" strokeLinejoin="round" /></svg>;
 }

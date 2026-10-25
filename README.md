@@ -16,14 +16,14 @@ node --env-file-if-exists=.env --import tsx src/server.ts --dev
 
 1. Pick **YouTube Video**, **Short-form**, or **Comic Book**. Each has an independent draft, input, production job, and current lesson. Upload PDF/TXT/MD to use extracted source material, or type a prompt to create a story from scratch. Pasted notes have their own source-text option.
 2. Add a **Groq API key** to write the script or comic storyboard. Review the story and choose an art direction, then use **Pollinations** to illustrate one, a few, or all missing scenes.
-3. **YouTube Video** uses fixed 16:9 output (1280 × 720). **Short-form** uses fixed 9:16 output (720 × 1280), with locally drawn narration captions. Add **ElevenLabs** for narration and the final MP4.
-4. Short-form's optional **brainrot clip** places the lesson in the top 720 × 640 region and loops silent gameplay in the bottom half. The default is an original, labeled runner placeholder. In the final-cut step, upload a playable **MP4 under 100 MB** to replace it with your own Subway Surfers gameplay. Clip audio is excluded. Turning the option off restores full-screen visuals. Changing the layout selects appropriately shaped image versions.
+3. **YouTube Video** uses fixed 16:9 output (1280 × 720). **Short-form** uses fixed 9:16 output (720 × 1280), with locally drawn narration captions on both formats. Add **ElevenLabs** for narration and the final MP4.
+4. Short-form's optional **brainrot clip** places the lesson in the top 720 × 640 region and loops silent gameplay in the bottom half. The default is the bundled `subway_surfers.mp4` at the project root. In the final-cut step, upload a playable **MP4 under 100 MB** to use different gameplay. Clip audio is excluded. Turning the option off restores full-screen visuals. Changing the layout selects appropriately shaped image versions.
 5. **Comic Book** uses a dedicated 4-, 6-, or 8-panel storyboard with shared visual continuity and one action per picture. Captions are typeset locally, avoiding generated lettering and ambiguous speech bubbles. Review the illustrations, edit a scene prompt if needed, and select **Assemble comic page**. No ElevenLabs key is needed. Read the 1600-pixel-wide page with zoom or switch to panel-by-panel reading; download the PNG or reopen older editions.
 6. **My lessons** keeps all three formats, their sources, settings, image versions, and finished outputs across browser/server restarts. Old upload/topic lessons remain available as YouTube projects.
 
 Comics use one structured Groq storyboard call and one Pollinations request per uncached panel. They do not require reference-image APIs or an additional provider. Prompt continuity improves consistency but cannot guarantee model quality: inspect the captions and artwork before assembling. The automated tests mock providers and verify local rendering; live results depend on your keys, model access, quota, and the provider's output.
 
-Keys are used only for their requested operation and are never written to project files or browser storage. No second UI or manual JSON handoff is required. The old screens are preserved in [`studio/archive/public/`](studio/archive/README.md); `pnpm studio` explicitly opens the archived app and its existing `studio/data/` projects.
+Keys auto-save in this browser from the home settings card or any generation step. They are sent only for the requested provider operation and never written to project files. Use **Clear keys** on shared devices. No second UI or manual JSON handoff is required. The old screens are preserved in [`studio/archive/public/`](studio/archive/README.md); `pnpm studio` explicitly opens the archived app and its existing `studio/data/` projects.
 
 New projects live in **`output/lessons/`**, configurable with `LESSON_DATA_DIR`. Keep that folder to retain your library. Each project includes `source.txt`, `script.txt`, `lesson.json`, `project.json`, image versions, cached audio, and MP4 versions. All generated media stays out of Git. See [integration details](docs/studio-integration.md).
 
@@ -45,7 +45,7 @@ References: [Pollinations image API](https://github.com/pollinations/pollination
 
 Entertainify now includes a React + Tailwind dashboard with custom SVG doodles and pixel sprites, an interactive comic landing page, expanding full-screen panels, a drawing pad, and a lesson studio. Fonts are bundled locally; no external image or font service is needed.
 
-After installing dependencies, start the site (dashboard keys are entered at each step; `.env` is optional):
+After installing dependencies, start the site (dashboard keys auto-save from the home settings card or each step; `.env` is optional):
 
 ```sh
 npm run dev
@@ -58,7 +58,7 @@ Open **http://127.0.0.1:3000**. On PowerShell, use `npm.cmd` if needed. Both the
 - **From scratch:** describe a topic and choose an audience and approximate runtime, including a 30-second story (75 words). Each format has its own draft and current lesson.
 - **Three formats:** YouTube Video, Short-form, and Comic Book each keep separate drafts and selections. Old sample records remain retired in `output/lessons/.retired-samples/`.
 - **Results:** one lesson player shows narration/rendering progress, then the finished video with browser playback and downloads. Saved-version Watch/Listen controls focus that same player and start playback. Audio appears separately only for an explicitly generated audio-only version.
-- **My lessons:** only started lessons appear, including recoverable failures. Start another lesson at any stage and reopen any earlier one from history. Production continues independently on the server. Source, recipe, script, settings, images and output versions survive restarts. Per-workflow drafts/selections and per-lesson unfinished settings/prompt edits stay in local browser storage; API keys do not.
+- **My lessons:** only started lessons appear, including recoverable failures. Start another lesson at any stage and reopen any earlier one from history. Production continues independently on the server. Source, recipe, script, settings, images and output versions survive restarts. Per-workflow drafts/selections and per-lesson unfinished settings/prompt edits stay in local browser storage; API keys also persist in this browser and can be removed with **Clear keys** in the home settings card. Do not retain keys on a shared browser profile.
 
 To build and run the production app locally:
 
@@ -85,6 +85,8 @@ Limits are **25 MB, 60 pages, and 80,000 extracted characters**. Oversized sourc
 No extractor can guarantee perfect text from every PDF. Digital text can include Unicode; OCR currently supports **English**. Blurry scans, handwriting, equations, and diagrams may need corrections or a short explanation in the preview. The app flags uncertain OCR and pages without readable text. Password-protected PDFs need an unlocked export. The original PDF never goes to the writing provider; only the reviewed source text is submitted when you generate a lesson.
 
 ## Setup
+
+For a free public HTTPS link using this computer, see [public hosting](docs/public-hosting.md). The launcher keeps public lessons separate from your local library. Keep this computer awake and online while sharing.
 
 Install **Node.js 22.14 or newer** in your regular Windows environment from the [official Node.js download page](https://nodejs.org/en/download). **Node.js 24 LTS** is a suitable choice and includes npm. A runtime bundled with an editor or Codex may not be available in your terminal.
 
@@ -203,7 +205,7 @@ The script generator requests a structured title and narration. Groq provides an
 
 The CLI and library can read provider keys from environment variables. The dashboard sends each user-entered key to the local backend for one stage; the backend calls the provider and never saves or returns the key. Never embed credentials in the frontend bundle.
 
-All visitors using your Groq key share the organization's free quota. Check the current [Groq rate limits](https://console.groq.com/docs/rate-limits) and your account's limits before deployment. The local dashboard includes input caps, concurrency limits, and basic IP request limits; public deployment still needs per-user controls. Free-tier access can support a hackathon demo, but does not guarantee unlimited public traffic. If a large lesson exceeds the allowance, shorten the source or request a shorter script with `--words`.
+All visitors using your Groq key share the organization's free quota. Check the current [Groq rate limits](https://console.groq.com/docs/rate-limits) and your account's limits before deployment. The local dashboard includes input caps, concurrency limits, and basic IP request limits; the public server also isolates each visitor’s lessons and PDF imports using a random HttpOnly browser cookie. Free-tier access can support a hackathon demo, but does not guarantee unlimited public traffic. If a large lesson exceeds the allowance, shorten the source or request a shorter script with `--words`.
 
 An OpenAI or Grok consumer account is not a shared free backend credential for a public website. OpenAI's [Sign in with ChatGPT integration](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt) can let eligible Plus/Pro users authorize use of **their own** plan allowance. The documented local open-source/personal integration does not grant general hosted-app access; hosted or paid apps need approval through the access process. That would require a separate per-user sign-in integration, and would not pool your subscription for every visitor. This starter uses provider API keys instead.
 

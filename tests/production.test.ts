@@ -45,6 +45,7 @@ function fakeEngine() {
       return { audioPath, alignment: {}, cached };
     },
     async renderVideo(options) {
+      assert.equal(options.captions, true, "every video includes captions on image scenes");
       assert.equal(options.requireImageMajority, !options.fallbackText);
       calls.render++; calls.mapping = options.mapping;
       options.onProgress("Encoding MP4"); await writeFile(join(options.outputDir, "video.mp4"), "0123456789video");
@@ -53,6 +54,22 @@ function fakeEngine() {
   };
   return { engine, calls };
 }
+
+test("short-form uses bundled Subway Surfers by default and preserves uploaded overrides", async t => {
+  const dataDir = await mkdtemp(join(tmpdir(), "entertainify-default-clip-")); t.after(() => rm(dataDir, { recursive: true, force: true }));
+  const { engine } = fakeEngine(); const renders: Parameters<MediaEngine["renderVideo"]>[0][] = [];
+  const render = engine.renderVideo; engine.renderVideo = async options => { renders.push(options); return render(options); };
+  const service = new ProductionService({ dataDir, engine: async () => engine }); t.after(() => service.close());
+  const job = service.create({ ...request, format: "short", mode: "script", brainrot: true });
+  await service.advance(job.id, "video", { apiKey: "voice-secret", settings: { fallbackText: true } }); await settled(job);
+  assert.equal(job.status, "complete", job.error); assert.equal(renders[0]!.gameplayPath, join(process.cwd(), "subway_surfers.mp4"));
+  assert.equal(renders[0]!.gameplaySource, "subway-surfers"); assert.match(job.outputs![0]!.label!, /Subway Surfers/);
+  job.gameplayClip = "clips/11111111-1111-1111-1111-111111111111.mp4";
+  await service.advance(job.id, "video", { apiKey: "voice-secret" }); await settled(job);
+  assert.equal(renders[1]!.gameplayPath, service.assetPath(job.id, job.gameplayClip)); assert.equal(renders[1]!.gameplaySource, "uploaded");
+  await service.advance(job.id, "video", { apiKey: "voice-secret", settings: { brainrot: false } }); await settled(job);
+  assert.equal(renders[2]!.gameplayPath, undefined);
+});
 
 test("staged production gates keys, maps unique portrait images, retains source/script/video and resumes after restart", async t => {
   const dataDir = await mkdtemp(join(tmpdir(), "entertainify-production-")); t.after(() => rm(dataDir, { recursive: true, force: true }));
@@ -106,7 +123,7 @@ test("durable API lists lessons, downloads text, streams MP4 ranges and rejects 
   const { engine } = fakeEngine(); const service = new ProductionService({ dataDir, engine: async () => engine });
   const job = service.create({ ...request, mode: "script" });
   await service.advance(job.id, "video", { apiKey: "voice-secret", settings: { fallbackText: true } }); await settled(job);
-  const server = await createAppServer(false, service); await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const server = await createAppServer(false, service, { localOnly: true }); await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
   const address = server.address(); assert.ok(address && typeof address === "object"); const base = `http://127.0.0.1:${address.port}`;
   assert.equal((await (await fetch(`${base}/api/lessons`)).json() as unknown[]).length, 1);
@@ -143,7 +160,7 @@ test("replanning through the API keeps narration and prior videos, then saves a 
   await service.advance(job.id, "video", { apiKey: "voice-secret", settings: { fallbackText: true } }); await settled(job);
   const previous = job.videoUrl!, original = structuredClone(job.result);
   await service.advance(job.id, "settings", { settings: { style: LEGACY_DOODLE_STYLE } });
-  const server = await createAppServer(false, service); await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const server = await createAppServer(false, service, { localOnly: true }); await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
   const address = server.address(); assert.ok(address && typeof address === "object");
   const url = `http://127.0.0.1:${address.port}/api/lessons/${job.id}/plan`;
@@ -271,7 +288,7 @@ test("legacy sample records are retired once, while real lessons retain their wo
   await restored.close();
   const again = new ProductionService({ dataDir }); t.after(() => again.close());
   assert.equal(again.list().length, 1);
-  const server = await createAppServer(false, again);
+  const server = await createAppServer(false, again, { localOnly: true });
   await new Promise<void>(done => server.listen(0, "127.0.0.1", done));
   t.after(() => new Promise<void>(done => server.close(() => done())));
   const address = server.address(); if (!address || typeof address === "string") throw new Error("Missing server address");

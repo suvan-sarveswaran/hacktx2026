@@ -108,7 +108,7 @@ test("comic images, local page, saved editions and HTTP downloads work without v
   assert.doesNotMatch(await readFile(join(dataDir, job.id, "project.json"), "utf8"), /test-groq|test-image|apiKey/);
   await service.close();
   const restored = new ProductionService({ dataDir }); assert.equal(restored.get(job.id)!.comicOutputs!.length, 2);
-  const server = await createAppServer(false, restored); await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve)); t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
+  const server = await createAppServer(false, restored, { localOnly: true }); await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve)); t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
   const address = server.address(); assert.ok(address && typeof address === "object");
   const response = await fetch(`http://127.0.0.1:${address.port}${first}`); assert.equal(response.headers.get("content-type"), "image/png"); assert.equal((await response.arrayBuffer()).byteLength, bytes.length);
 });
@@ -123,7 +123,7 @@ test("gameplay upload validates MP4, stays with its lesson, and survives restart
   const second = service.create({ ...request, format: "short", mode: "script" });
   await assert.rejects(service.uploadGameplay(first.id, Buffer.from("invalid")), /could not be read/);
   assert.equal(first.gameplayClip, undefined);
-  const server = await createAppServer(false, service); await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const server = await createAppServer(false, service, { localOnly: true }); await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address(); assert.ok(address && typeof address === "object"); const base = `http://127.0.0.1:${address.port}`;
   try {
     assert.equal((await fetch(`${base}/api/lessons/${first.id}/clip`, { method: "POST", headers: { "Content-Type": "text/plain" }, body: bytes })).status, 415);

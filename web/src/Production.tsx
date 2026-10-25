@@ -1,24 +1,14 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, Download, LoaderCircle, Sparkles, Square } from "lucide-react";
 import type { LessonJob, ProductionSettings, StageRequest } from "../../src/web-contract";
 import { ART_STYLES, DEFAULT_SETTINGS, IMAGE_MODELS } from "../../src/production-settings";
 import { imageTimeShare, VISUAL_PLAN_VERSION } from "../../src/visual-plan";
 import { api } from "./api";
+import { ApiKeyField, useApiKey } from "./ApiKeys";
 
 import { isProducing } from "./lesson-workspace";
 import { LessonPlayer } from "./LessonPlayer";
 import { ComicReader } from "./ComicReader";
-
-export function ApiKeyField({ provider, value, onChange }: { provider: string; value: string; onChange: (value: string) => void }) {
-  const [error, setError] = useState("");
-  const id = useId();
-  return <div className="key-field"><label htmlFor={id}>{provider} API key</label><input id={id} type="password" autoComplete="off" spellCheck={false} maxLength={500} value={value} onChange={e => onChange(e.target.value)} placeholder="Paste your key to unlock this step"/>
-    <label className="key-file">or load a key from a .txt file<input type="file" accept=".txt,text/plain" onChange={async e => {
-      const file = e.target.files?.[0]; e.target.value = ""; if (!file) return;
-      try { if (file.size > 1000) throw new Error("Choose a text file containing only your API key."); const key = (await file.text()).trim(); if (!key || key.length > 500 || /[\r\n]/.test(key)) throw new Error("The file must contain a single API key."); onChange(key); setError(""); }
-      catch (error) { setError(error instanceof Error ? error.message : "Could not read that key file."); }
-    }}/></label><small>Used only for this step. Never saved with your lesson or in browser storage.</small>{error && <p role="alert">{error}</p>}</div>;
-}
 
 export function Production({ job, visible, onUpdate, onReset, connectionError, onRetryConnection }: { job: LessonJob; visible: boolean; onUpdate: (job: LessonJob) => void; onReset: () => void; connectionError: string; onRetryConnection: () => void }) {
   const comic = job.workflow === "comic", short = job.workflow === "short";
@@ -30,9 +20,9 @@ export function Production({ job, visible, onUpdate, onReset, connectionError, o
   });
   const [settings, setSettings] = useState<ProductionSettings>({ ...DEFAULT_SETTINGS, ...job.settings, ...draft?.settings });
   const [preset, setPreset] = useState(() => Object.entries(ART_STYLES).find(([, style]) => style === (draft?.settings?.style ?? job.settings?.style))?.[0] ?? "custom");
-  const [imageKey, setImageKey] = useState("");
-  const [voiceKey, setVoiceKey] = useState("");
-  const [groqKey, setGroqKey] = useState("");
+  const [imageKey, setImageKey] = useApiKey("Pollinations");
+  const [voiceKey, setVoiceKey] = useApiKey("ElevenLabs");
+  const [groqKey, setGroqKey] = useApiKey("Groq");
   const [few, setFew] = useState<number>(draft?.few ?? 5);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -73,16 +63,13 @@ export function Production({ job, visible, onUpdate, onReset, connectionError, o
     try {
       const next = await api.stage(job.id, stage, { ...(stage === "stop" ? {} : { settings, prompts }), ...extras });
       onUpdate(next); setSettings(next.settings ?? settings); setPrompts({});
-      if (stage === "images") setImageKey("");
-      if (stage === "video") setVoiceKey("");
-      if (stage === "script" || stage === "plan") setGroqKey("");
     } catch (error) { setError(error instanceof Error ? error.message : "Could not start this step."); }
     finally { pendingRef.current = false; setPending(false); setStartingMedia(null); }
   }
   return <>
     <div className="result-heading"><span className="eyebrow">{comic ? "THE LITTLE COMIC FACTORY" : short ? "THE SHORT-FORM STUDIO" : "THE YOUTUBE STUDIO"}</span><h1>{job.status === "complete" ? <>That’s a wrap.<br/><span>{comic ? "Turn the page." : "Press play."}</span></> : <>One story.<br/><span>Three little steps.</span></>}</h1><p>{comic ? "Story. Illustrations. A page worth keeping." : "Script. Pictures. Voice. Your next lesson has a premiere."}</p><button className="ink-button" onClick={onReset}>Make another lesson <Sparkles size={16}/></button></div>
     <ol className="phase-strip" aria-label="Production stages">{(comic ? ["Plan the story", "Draw the panels", "Assemble the page", "Read the comic"] : ["Write the story", "Draw the scenes", "Voice + final cut", "Press play"]).map((label, index) => <li key={label} className={index === step ? "current" : index < step ? "done" : ""} aria-current={index === step ? "step" : undefined}><span>{index < step ? <Check size={16}/> : String(index + 1).padStart(2, "0")}</span>{label}</li>)}</ol>
-    <div className="production-status" aria-live="polite"><div className="flex justify-between gap-4"><strong>{job.message}</strong>{running && <LoaderCircle size={20} className="spin"/>}</div><div className="progress-track" role="progressbar" aria-label="Video production" aria-valuenow={job.progress} aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${job.progress}%` }}/></div><p className="input-note">{running ? "You can close this panel; generation continues while the server stays open." : "Saved locally · return to this project from My lessons anytime."}</p>{running && job.status !== "writing" && <button className="text-link" disabled={pending} onClick={() => void action("stop")}><Square size={13}/>Stop after saving progress</button>}</div>
+    <div className="production-status" aria-live="polite"><div className="flex justify-between gap-4"><strong>{job.message}</strong>{running && <LoaderCircle size={20} className="spin"/>}</div><div className="progress-track" role="progressbar" aria-label="Video production" aria-valuenow={job.progress} aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${job.progress}%` }}/></div><p className="input-note">{running ? "You can close this panel; generation continues while the server stays open." : "Saved to your private browser workspace. Download finished work to keep a copy."}</p>{running && job.status !== "writing" && <button className="text-link" disabled={pending} onClick={() => void action("stop")}><Square size={13}/>Stop after saving progress</button>}</div>
     {(error || connectionError || job.error) && <div className="error-box" role="alert">{error || connectionError || job.error}<button className="text-link" onClick={() => { setError(""); onRetryConnection(); }}>Refresh saved progress</button></div>}
     {!result && job.status === "failed" && <section className="phase-card"><h2>Let’s try the story again.</h2><ApiKeyField provider="Groq" value={groqKey} onChange={setGroqKey}/><button className="ink-button primary" disabled={locked || !groqKey.trim()} onClick={() => void action("script", { apiKey: groqKey })}>Retry script <ArrowRight size={18}/></button></section>}
     {result && <>
@@ -118,7 +105,7 @@ export function Production({ job, visible, onUpdate, onReset, connectionError, o
           <label htmlFor={`${job.id}-voice-model`}>Narration model</label><select id={`${job.id}-voice-model`} value={settings.model} onChange={e => change("model", e.target.value as ProductionSettings["model"])}><option value="eleven_flash_v2_5">Flash v2.5 · lower cost</option><option value="eleven_multilingual_v2">Multilingual v2 · long-form narration</option></select>
           {!fixedFormat && <>          <label htmlFor={`${job.id}-video-format`}>Video format</label><select id={`${job.id}-video-format`} value={settings.videoAspect} onChange={e => change("videoAspect", e.target.value as ProductionSettings["videoAspect"])}><option value="landscape">YouTube · 1280 × 720</option><option value="portrait">Reel · 720 × 1280</option><option value="square">Square · 1024 × 1024</option></select>
 </>}
-          {short && <div className="gameplay-option"><label className="script-checkbox"><input type="checkbox" checked={settings.brainrot} onChange={e => { change("brainrot", e.target.checked); change("imageAspect", e.target.checked ? "square" : "portrait"); }}/><span>Add a brainrot clip<small>Lesson + captions above. Silent gameplay below.</small></span></label>{settings.brainrot && <><p className="input-note">{job.gameplayClip ? "Your uploaded gameplay will loop below the lesson." : "The animated runner placeholder is included. Add Subway Surfers footage to replace it."}</p>{job.gameplayClip && <video className="gameplay-preview" controls muted preload="metadata" src={`/api/lessons/${job.id}/assets/${job.gameplayClip}`}/>}<label className="key-file">{job.gameplayClip ? "Replace gameplay clip" : "Upload Subway Surfers gameplay"}<input type="file" accept=".mp4,video/mp4" onChange={async e => {
+          {short && <div className="gameplay-option"><label className="script-checkbox"><input type="checkbox" checked={settings.brainrot} onChange={e => { change("brainrot", e.target.checked); change("imageAspect", e.target.checked ? "square" : "portrait"); }}/><span>Add a brainrot clip<small>Lesson + captions above. Silent gameplay below.</small></span></label>{settings.brainrot && <><p className="input-note">{job.gameplayClip ? "Your uploaded gameplay will loop below the lesson." : "Subway Surfers is included and loops automatically. You can replace it with your own MP4."}</p>{job.gameplayClip && <video className="gameplay-preview" controls muted preload="metadata" src={`/api/lessons/${job.id}/assets/${job.gameplayClip}`}/>}<label className="key-file">{job.gameplayClip ? "Replace gameplay clip" : "Use a different gameplay clip"}<input type="file" accept=".mp4,video/mp4" onChange={async e => {
             const file = e.target.files?.[0]; e.target.value = ""; if (!file || pendingRef.current) return;
             if (file.size > 100 * 1024 * 1024) { setError("Choose an MP4 under 100 MB."); return; }
             pendingRef.current = true; setPending(true); setError("");
@@ -129,7 +116,7 @@ export function Production({ job, visible, onUpdate, onReset, connectionError, o
           <div className="stage-estimate"><strong>{credits.toLocaleString()} characters to narrate</strong><span>Estimated voice credits: {settings.model === "eleven_flash_v2_5" ? `~${Math.ceil(credits / 2).toLocaleString()}–${credits.toLocaleString()}` : `~${credits.toLocaleString()}`} (depends on plan). Matching saved narration is reused. MP4 assembly is local.</span></div>
           <label className="script-checkbox"><input type="checkbox" checked={settings.fallbackText} onChange={e => change("fallbackText", e.target.checked)}/><span>Test preview: allow text fallback and skip the image-time minimum</span></label>
           <div className="batch-actions"><button className="ink-button" disabled={!voiceKey.trim() || imageDirty} onClick={() => void action("video", { apiKey: voiceKey, audioOnly: true })}>Generate audio only</button><button className="ink-button primary" disabled={!voiceKey.trim() || imageDirty || ((missing > 0 || needsMoreImages) && !settings.fallbackText)} onClick={() => void action("video", { apiKey: voiceKey })}>{settings.fallbackText ? "Create test preview" : job.failedStage === "video" ? "Retry · reuse saved voice" : "Create MP4"}<ArrowRight size={17}/></button></div>
-          <p className="input-note" role="status">{imageDirty ? "Apply image settings and prompt edits first." : needsMoreImages && !settings.fallbackText ? "Replan visuals with Groq first: images must cover more than half the final video." : missing > 0 && !settings.fallbackText ? `Generate ${missing} missing images to unlock MP4, or enable text fallback for a test preview.` : !voiceKey.trim() ? "Add your ElevenLabs key to continue." : settings.fallbackText ? "Test preview selected. Text cards may cover most of this cut." : "Ready for the final cut. Cuts follow actual speech timestamps at 30 fps."}</p>
+          <p className="input-note" role="status">{imageDirty ? "Apply image settings and prompt edits first." : needsMoreImages && !settings.fallbackText ? "Replan visuals with Groq first: images must cover more than half the final video." : missing > 0 && !settings.fallbackText ? `Generate ${missing} missing images to unlock MP4, or enable text fallback for a test preview.` : !voiceKey.trim() ? "Add your ElevenLabs key to continue." : settings.fallbackText ? "Test preview selected. Text cards may cover most of this cut." : "Ready for the final cut. Images include captions. Cuts follow actual speech timestamps at 30 fps."}</p>
           </fieldset>
         </section></>}
       </div>

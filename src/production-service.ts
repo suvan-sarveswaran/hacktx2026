@@ -18,7 +18,7 @@ interface ImageResult { scenes: { status: string; file?: string; error?: string 
 export interface MediaEngine {
   generateImages(prompts: string[], options: { apiKey: string; model: string; seeds?: number[]; outDir: string; width: number; height: number; signal: AbortSignal; concurrency: number; onProgress: (event: ImageEvent) => void }): Promise<ImageResult>;
   synthesizeNarration(script: string, options: { apiKey: string; voiceId: string; model: string; cacheDir: string; signal: AbortSignal }): Promise<{ audioPath: string; alignment: unknown; cached: boolean }>;
-  renderVideo(options: { lesson: PipelineResult; alignment: unknown; audioPath: string; mapping: Record<number, string>; fallbackText: boolean; requireImageMajority?: boolean; artStyle?: string; textStyle?: string; brainrot?: boolean; gameplayPath?: string; captions?: boolean; width: number; height: number; outputDir: string; signal: AbortSignal; onProgress: (message: string) => void }): Promise<unknown>;
+  renderVideo(options: { lesson: PipelineResult; alignment: unknown; audioPath: string; mapping: Record<number, string>; fallbackText: boolean; requireImageMajority?: boolean; artStyle?: string; textStyle?: string; brainrot?: boolean; gameplayPath?: string; gameplaySource?: string; captions?: boolean; width: number; height: number; outputDir: string; signal: AbortSignal; onProgress: (message: string) => void }): Promise<unknown>;
 }
 async function loadEngine(): Promise<MediaEngine> {
   const directory = resolve(process.cwd(), "studio");
@@ -206,6 +206,7 @@ export class ProductionService {
     const key = stage === "settings" ? "" : requireKey(input.apiKey, stage === "images" ? "Pollinations" : "ElevenLabs");
     if (input.count !== undefined && (!Number.isInteger(input.count) || input.count < 1 || input.count > 1000)) throw new RequestError("Choose 1–1,000 images, or all missing images.");
     if (input.audioOnly !== undefined && typeof input.audioOnly !== "boolean") throw new RequestError("Choose audio only or MP4.");
+    if (stage === "video" && !input.audioOnly && settings.brainrot && !job.gameplayClip && !existsSync(resolve(process.cwd(), "subway_surfers.mp4"))) throw new RequestError("The default Subway Surfers clip is missing. Upload an MP4 before rendering.", 409);
     if (stage === "video" && !input.audioOnly && !settings.fallbackText && imageTimeShare(job.result.chunks) <= 0.5) throw new RequestError("Images must cover more than half the video. Replan visuals with Groq to add relevant illustrations before creating the MP4.", 409);
     if (input.prompts !== undefined && (!input.prompts || typeof input.prompts !== "object" || Array.isArray(input.prompts))) throw new RequestError("Invalid scene prompts.");
     const prompts: Record<string, string> = { ...job.scenePrompts };
@@ -290,13 +291,13 @@ export class ProductionService {
           await engine.renderVideo({ lesson: job.result!, alignment: voice.alignment, audioPath: voice.audioPath,
             mapping: Object.fromEntries(frames.filter(f => f.imageUrl).map(f => [f.chunkIndex, join(this.folder(id), "frames", `${f.version}.png`)])),
             fallbackText: settings.fallbackText, requireImageMajority: !settings.fallbackText, artStyle: settings.style, textStyle: settings.textStyle, ...DIMENSIONS[settings.videoAspect], outputDir, signal,
-            brainrot: settings.brainrot, captions: job.workflow === "short", ...(job.gameplayClip ? { gameplayPath: this.assetPath(id, job.gameplayClip) } : {}),
+            brainrot: settings.brainrot, captions: true, ...(settings.brainrot ? { gameplayPath: job.gameplayClip ? this.assetPath(id, job.gameplayClip) : resolve(process.cwd(), "subway_surfers.mp4"), gameplaySource: job.gameplayClip ? "uploaded" : "subway-surfers" } : {}),
             onProgress: message => { job.message = message; },
           });
           job.videoUrl = `${prefix}/video.mp4`; job.timelineUrl = `${prefix}/timeline.json`;
         }
         job.outputs ??= [];
-        job.outputs.push({ audioUrl: job.audioUrl, ...(!input.audioOnly ? { videoUrl: job.videoUrl!, timelineUrl: job.timelineUrl! } : {}), createdAt: new Date().toISOString(), label: `${settings.brainrot ? job.gameplayClip ? "Split screen · uploaded gameplay · " : "Split screen · runner placeholder · " : ""}${!input.audioOnly && settings.fallbackText ? "Text fallback preview · " : ""}${settings.videoAspect} · ${settings.model}${voice.cached ? " · saved voice reused" : ""}` });
+        job.outputs.push({ audioUrl: job.audioUrl, ...(!input.audioOnly ? { videoUrl: job.videoUrl!, timelineUrl: job.timelineUrl! } : {}), createdAt: new Date().toISOString(), label: `${settings.brainrot ? job.gameplayClip ? "Split screen · uploaded gameplay · " : "Split screen · Subway Surfers · " : ""}${!input.audioOnly && settings.fallbackText ? "Text fallback preview · " : ""}${settings.videoAspect} · ${settings.model}${voice.cached ? " · saved voice reused" : ""}` });
         job.status = input.audioOnly ? "audio-ready" : "complete"; job.progress = input.audioOnly ? 80 : 100;
         job.message = input.audioOnly ? "Voiceover saved. Create the MP4 next; this voice will be reused." : "That’s a wrap! Your video, source text, and script are saved in My lessons.";
       }
@@ -312,6 +313,7 @@ export class ProductionService {
     const job = this.jobs.get(id);
     if (!job) throw new RequestError("Lesson not found.", 404);
     if (job.workflow !== "short") throw new RequestError("Gameplay clips belong to Short-form lessons.");
+    if (bytes.length < 12 || bytes.length > 100 * 1024 * 1024 || bytes.toString("ascii", 4, 8) !== "ftyp") throw new RequestError("That clip could not be read. Upload a playable MP4 under 100 MB.");
     if (running(job) || this.controllers.has(id)) throw new RequestError("Wait for the current stage to finish before replacing the clip.", 409);
     this.checkCapacity();
     const controller = new AbortController(); this.controllers.set(id, controller);
@@ -319,7 +321,7 @@ export class ProductionService {
     mkdirSync(join(this.folder(id), "clips"), { recursive: true }); writeFileSync(file, bytes);
     try {
       const video = await import(pathToFileURL(resolve(process.cwd(), "studio/video.mjs")).href);
-      await video.runFfmpeg(["-protocol_whitelist", "file,pipe", "-i", file, "-map", "0:v:0", "-t", "0.1", "-f", "null", "-"], { cwd: this.folder(id), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]) });
+      await video.runFfmpeg(["-protocol_whitelist", "file,pipe", "-f", "mov", "-i", file, "-map", "0:v:0", "-t", "0.1", "-f", "null", "-"], { cwd: this.folder(id), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]) });
       job.gameplayClip = asset; this.save(job); return job;
     } catch { await rm(file, { force: true }); throw new RequestError("That clip could not be read. Upload a playable MP4 under 100 MB."); }
     finally { this.controllers.delete(id); }

@@ -13,7 +13,7 @@ import type { PdfJob, LessonJob } from "../src/web-contract.js";
 async function isolatedServer(t: TestContext) {
   const dataDir = await mkdtemp(join(tmpdir(), "entertainify-server-"));
   t.after(() => rm(dataDir, { recursive: true, force: true }));
-  return createAppServer(false, new ProductionService({ dataDir }));
+  return createAppServer(false, new ProductionService({ dataDir }), { localOnly: true });
 }
 
 test("HTTP API validates requests, returns real narration chunks, and serves the original JSON download", async (t) => {

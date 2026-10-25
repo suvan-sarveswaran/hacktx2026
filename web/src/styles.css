@@ -2656,9 +2656,30 @@ textarea::placeholder {
 }
 
 /* Format studios extend the same paper, ink, stickers, and hand-drawn palette. */
-.comic-grid > .hero-panel { grid-column: span 12; }
+.comic-grid > .hero-panel { grid-column: span 8; }
 .comic-grid > .format-panel { grid-column: span 4; }
 .comic-book-panel { background: var(--yellow); }
+.settings-panel { grid-column: span 4; background: #e8dff1; padding: 25px 26px; transform: rotate(.7deg); }
+.settings-kicker, .settings-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.settings-panel h2 { font-size: clamp(25px, 2.4vw, 34px); line-height: 1.15; letter-spacing: -1px; margin: 13px 0 7px; }
+.settings-panel > p { font-size: 14px; line-height: 1.6; }
+.settings-panel .key-field { margin: 13px 0; }
+.settings-panel .key-field > label { font-size: 12px; margin: 0 0 6px; }
+.settings-panel .key-field > input { padding: 10px 12px; }
+.settings-status { padding-top: 10px; margin-top: 15px; border-top: 1px dashed #84728f; font-size: 11px; flex-wrap: wrap; }
+.settings-status > span { display: flex; gap: 7px; align-items: center; }
+.settings-status button { font-size: 11px; }
+.settings-panel > small { display: block; font-size: 11px; line-height: 1.65; margin-top: 12px; color: #594b65; }
+.comic-grid > .hero-panel { display: flex; align-items: center; }
+.hero-copy > p { line-height: 1.8; }
+.hero-panel h1 { line-height: 1.12; }
+.speech-bubble { line-height: 1.2; }
+.frame-card p { line-height: 1.8; padding: 4px 3px; }
+.scene-caption { line-height: 1.45; padding: 12px 20px; }
+.action-main p { line-height: 1.7; margin-top: 13px; }
+.script-checkbox span small { display: block; line-height: 1.6; margin-top: 5px; }
+@media(max-width: 900px) { .comic-grid > .hero-panel { grid-column: span 7; } .settings-panel { grid-column: span 5; padding: 22px; } .hero-copy { max-width: 100%; } .hero-character { width: 100px; right: 5px; bottom: 18px; } .hero-panel h1 { font-size: clamp(33px, 5vw, 45px); } }
+@media(max-width: 650px) { .comic-grid > .hero-panel, .settings-panel { grid-column: span 12; } .settings-panel { padding: 22px; } .settings-panel h2 { font-size: 30px; } .settings-panel .key-field > input { font-size: 16px; } .hero-panel h1 { font-size: clamp(31px, 9vw, 43px); } }
 .format-panel .action-art { width: 104px; opacity: .9; }
 .format-panel .action-main h2 { font-size: clamp(32px, 3.2vw, 48px); }
 .format-panel .action-main { min-height: 160px; }
