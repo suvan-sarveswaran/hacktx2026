@@ -39,10 +39,22 @@ export function Brain({ className = "" }: { className?: string }) {
 
 const ghost = ["0001111000","0012222100","0122222210","0121212210","0121212210","0122222210","0123332210","0122222210","0121221210","0101001010"];
 const cat = ["001100011000","001210012100","001222222100","011212212110","122222222221","122233332221","122222222221","011111111110","001100011000"];
-export function Pixel({ kind = "cat", className = "" }: { kind?: "cat" | "ghost"; className?: string }) {
-  const pixels = kind === "ghost" ? ghost : cat;
-  const colors = ["transparent", "#28271f", kind === "ghost" ? "#faf2da" : "#bdabe4", "#ef86aa"];
+const star = ["00000100000","00001210000","00001210000","01112221110","01222222210","00122222100","00012221000","00122222100","01221012210","01110001110"];
+export function Pixel({ kind = "cat", className = "" }: { kind?: "cat" | "ghost" | "star"; className?: string }) {
+  const pixels = kind === "ghost" ? ghost : kind === "star" ? star : cat;
+  const colors = ["transparent", "#28271f", kind === "ghost" ? "#faf2da" : kind === "star" ? "#f8d64a" : "#bdabe4", "#ef86aa"];
   return <svg className={className} viewBox={`0 0 ${pixels[0].length} ${pixels.length}`} shapeRendering="crispEdges" aria-hidden="true">{pixels.flatMap((row, y) => [...row].map((pixel, x) => pixel !== "0" && <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill={colors[Number(pixel)]} />))}</svg>;
+}
+
+/** Decorative flights use only CSS transforms and never intercept clicks or scrolling. */
+export function SpriteFlights({ paused }: { paused: boolean }) {
+  return <div className={`sprite-sky${paused ? " sprite-sky-paused" : ""}`} aria-hidden="true">
+    <div className="flying-sprite sprite-cat"><div className="sprite-body"><span className="sprite-trail"/><Pixel/><span className="sprite-glint">✦</span></div></div>
+    <div className="flying-sprite sprite-ghost"><div className="sprite-body"><span className="sprite-trail"/><Pixel kind="ghost"/></div></div>
+    <div className="flying-sprite sprite-star"><div className="sprite-body"><Pixel kind="star"/></div></div>
+    <div className="flying-sprite sprite-cat sprite-cat-little"><div className="sprite-body"><span className="sprite-trail"/><Pixel/></div></div>
+    <div className="flying-sprite sprite-star sprite-star-little"><div className="sprite-body"><Pixel kind="star"/></div></div>
+  </div>;
 }
 
 export function DoodlePad() {
