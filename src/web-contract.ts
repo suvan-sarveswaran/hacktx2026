@@ -2,6 +2,8 @@ import type { PipelineResult } from "./pipeline.js";
 
 /** Shared browser/server contract. PipelineResult is passed unchanged to the renderer. */
 export type LessonStatus = "writing" | "planning" | "images" | "voice" | "rendering" | "script-ready" | "images-ready" | "audio-ready" | "complete" | "failed";
+export type Workflow = "upload" | "scratch";
+export type LessonSummary = Pick<LessonJob, "id" | "createdAt" | "demo" | "status" | "workflow"> & { title: string };
 export interface LessonRequest {
   text: string;
   mode: "material" | "topic" | "script";
@@ -11,11 +13,15 @@ export interface LessonRequest {
 }
 export interface LessonJob {
   id: string;
+  revision?: number;
   status: LessonStatus;
   progress: number;
   message: string;
   createdAt: string;
   demo: boolean;
+  workflow?: Workflow;
+  recipe?: Pick<LessonRequest, "mode" | "audience" | "targetWords">;
+  operation?: "audio" | "video";
   result?: PipelineResult;
   videoUrl?: string;
   error?: string;
@@ -40,7 +46,7 @@ export interface ProductionSettings {
   fallbackText: boolean;
 }
 export interface LessonFrame { chunkIndex: number; prompt: string; version: string; seed?: number; imageUrl?: string; error?: string }
-export interface SavedOutput { videoUrl?: string; audioUrl: string; createdAt: string; label: string }
+export interface SavedOutput { videoUrl?: string; audioUrl: string; timelineUrl?: string; createdAt: string; label: string }
 export interface StageRequest {
   apiKey?: string;
   settings?: Partial<ProductionSettings>;

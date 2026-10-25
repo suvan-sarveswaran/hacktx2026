@@ -68,8 +68,9 @@ export async function createAppServer(dev = false, service = new ProductionServi
           return;
         }
         if (req.method === "POST") {
+          if (path === "/api/demo") throw new RequestError("The sample storyboard has been retired. Start a lesson from upload or a topic.", 410);
           const stage = /^\/api\/lessons\/([a-f0-9-]+)\/(script|plan|images|video|settings|stop)$/.exec(path);
-          if (!["/api/lessons", "/api/demo", "/api/documents", "/api/voices"].includes(path) && !stage) throw new RequestError("Page not found.", 404);
+          if (!["/api/lessons", "/api/documents", "/api/voices"].includes(path) && !stage) throw new RequestError("Page not found.", 404);
           const now = Date.now();
           for (const [key, value] of requests) if (value.until < now) requests.delete(key);
           const ip = req.socket.remoteAddress ?? "local";
@@ -93,10 +94,10 @@ export async function createAppServer(dev = false, service = new ProductionServi
             const result = await response.json() as { voices?: { voice_id: string; name: string }[] };
             json(res, 200, { voices: (result.voices ?? []).map(v => ({ id: v.voice_id, name: v.name })) }); return;
           }
-          const request = path === "/api/demo" ? { text: "Sample", mode: "script" as const, audience: "Everyone", targetWords: 150 } : validateLessonRequest(body);
+          const request = validateLessonRequest(body);
           limit.count++;
           requests.set(ip, limit);
-          json(res, 202, service.create(request, path === "/api/demo"));
+          json(res, 202, service.create(request));
           return;
         }
         if (req.method === "GET" && path === "/api/lessons") { json(res, 200, service.list()); return; }

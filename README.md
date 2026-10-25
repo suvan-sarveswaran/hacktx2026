@@ -51,10 +51,10 @@ Open **http://127.0.0.1:3000**. On PowerShell, use `npm.cmd` if needed. Both the
 
 - **Upload material:** choose or drop a `.pdf`, UTF-8 `.txt` / `.md` file, or paste course material. PDFs become editable source text first; Groq writes narration, per-scene image prompts, and text-card captions together.
 - **Existing narration:** check “I already have a narration script” to keep the original words as readable text cards with no AI request. Use **Replan visuals** to add Groq-directed illustrations later.
-- **From scratch:** describe a topic and choose an audience and approximate runtime. A topic-specific prompt teaches from general knowledge rather than treating the request as source evidence.
-- **Sample lesson:** a clearly marked, prewritten mitochondria lesson demonstrates real scene splitting without an API key or renderer.
-- **Results:** generate illustrations and aligned narration, watch and download the completed MP4, inspect scene prompts, and download source/script text or lesson JSON. The demo remains an explicitly labeled silent storyboard.
-- **My lessons:** the library comes from durable server project files. It survives browser and server restarts. Draft text and the current job ID also stay in browser session storage; API keys do not.
+- **From scratch:** describe a topic and choose an audience and approximate runtime, including a 30-second story (75 words). Upload and topic workflows have separate drafts and current lessons.
+- **Coming-soon widget:** the former sample panel is an independent placeholder with no generation or API behavior. Old sample records are retired from the library on server startup into `output/lessons/.retired-samples/`, preserving their files.
+- **Results:** one lesson player shows narration/rendering progress, then the finished video with browser playback and downloads. Saved-version Watch/Listen controls focus that same player and start playback. Audio appears separately only for an explicitly generated audio-only version.
+- **My lessons:** only started lessons appear, including recoverable failures. Start another lesson at any stage and reopen any earlier one from history. Production continues independently on the server. Source, recipe, script, settings, images and output versions survive restarts. Per-workflow drafts/selections and per-lesson unfinished settings/prompt edits stay in local browser storage; API keys do not.
 
 To build and run the production app locally:
 
@@ -76,7 +76,7 @@ Upload a PDF in the existing text panel. The studio shows page-by-page progress,
 
 The server uses PDF.js to read digital text in spatial order, including textbook columns, headings, and slide bullets. It cleans line wrapping, ligatures, and repeated text in page margins. Pages containing images, scans, or rotated text are rendered and read with local Tesseract OCR. Mixed pages retain their digital text and add readable text from figures. PDF fonts, character maps, and English OCR data are bundled with the dependencies; PDF extraction requires no AI key, network download, or external document service.
 
-Limits are **25 MB, 60 pages, and 80,000 extracted characters**. Oversized sources are rejected instead of silently truncated. Imports run in separate workers with a ten-minute limit. Canceling or closing the panel stops the import; completed server source text is removed once retrieved by the browser. Abandoned imports expire after an hour and at most 20 import jobs are retained. Files are processed in memory, without saving uploads to disk.
+Limits are **25 MB, 60 pages, and 80,000 extracted characters**. Oversized sources are rejected instead of silently truncated. Imports run in separate workers with a ten-minute limit. Closing the panel keeps the import running; canceling or leaving/reloading the app stops the browser's import session. Completed server source text is removed once retrieved by the browser. Abandoned imports expire after an hour and at most 20 import jobs are retained. Files are processed in memory, without saving uploads to disk.
 
 No extractor can guarantee perfect text from every PDF. Digital text can include Unicode; OCR currently supports **English**. Blurry scans, handwriting, equations, and diagrams may need corrections or a short explanation in the preview. The app flags uncertain OCR and pages without readable text. Password-protected PDFs need an unlocked export. The original PDF never goes to the writing provider; only the reviewed source text is submitted when you generate a lesson.
 

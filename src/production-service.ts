@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { entertainify } from "./pipeline.js";
 import type { PipelineResult } from "./pipeline.js";
-import { LessonService, parseNarration, RequestError } from "./lesson-service.js";
+import { parseNarration, RequestError } from "./lesson-service.js";
 import { DEFAULT_SETTINGS, DIMENSIONS, ART_STYLES, LEGACY_DOODLE_STYLE } from "./production-settings.js";
 import { imageTimeShare, MIN_PLANNED_IMAGE_SHARE, textFirstChunks, VISUAL_PLAN_VERSION } from "./visual-plan.js";
 import { planExistingLesson } from "./visual-planner.js";
@@ -66,6 +66,16 @@ export class ProductionService {
       if (!existsSync(file)) continue;
       const saved = JSON.parse(readFileSync(file, "utf8")) as { job: LessonJob; request: LessonRequest };
       if (saved.job.id !== id) throw new Error(`Invalid saved lesson ${id}.`);
+      // Retire the old seeded storyboards without deleting any of their files.
+      // Both paths are confined to dataDir by the validated UUID above.
+      if (saved.job.demo) {
+        const archive = join(this.dataDir, ".retired-samples");
+        mkdirSync(archive, { recursive: true });
+        renameSync(this.folder(id), join(archive, id));
+        continue;
+      }
+      saved.job.workflow = saved.request.mode === "topic" ? "scratch" : "upload";
+      saved.job.recipe = { mode: saved.request.mode, audience: saved.request.audience, targetWords: saved.request.targetWords };
       saved.job.settings = { ...DEFAULT_SETTINGS, ...saved.job.settings };
       this.jobs.set(id, saved.job); this.requests.set(id, saved.request);
       if (running(saved.job)) {
@@ -76,9 +86,10 @@ export class ProductionService {
     }
   }
   get(id: string) { return this.jobs.get(id); }
-  list() { return [...this.jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(job => ({ id: job.id, title: job.result?.title ?? "Untitled lesson", createdAt: job.createdAt, status: job.status, demo: job.demo })); }
+  list() { return [...this.jobs.values()].filter(job => !job.demo).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(job => ({ id: job.id, title: job.result?.title ?? job.sourceText?.slice(0, 80) ?? "New lesson", createdAt: job.createdAt, status: job.status, demo: job.demo, workflow: job.workflow })); }
   private folder(id: string) { return join(this.dataDir, id); }
   private save(job: LessonJob) {
+    job.revision = (job.revision ?? 0) + 1;
     const folder = this.folder(job.id); mkdirSync(folder, { recursive: true });
     const temp = join(folder, `${randomUUID()}.tmp`);
     writeFileSync(temp, JSON.stringify({ job, request: this.requests.get(job.id) }, null, 2));
@@ -90,14 +101,13 @@ export class ProductionService {
     }
   }
   private checkCapacity() { if (this.controllers.size >= 3) throw new RequestError("Three lessons are already running. Try again shortly.", 429); }
-  create(request: LessonRequest, demo = false): LessonJob {
+  create(request: LessonRequest): LessonJob {
     this.checkCapacity();
-    const key = !demo && request.mode !== "script" ? requireKey(request.apiKey, "Groq") : "";
+    const key = request.mode !== "script" ? requireKey(request.apiKey, "Groq") : "";
     const clean = { text: request.text, mode: request.mode, audience: request.audience, targetWords: request.targetWords };
-    const job: LessonJob = { id: randomUUID(), createdAt: new Date().toISOString(), status: "writing", progress: 5, message: "Writing a story worth listening to…", demo, sourceText: request.text, settings: { ...DEFAULT_SETTINGS }, outputs: [] };
+    const job: LessonJob = { id: randomUUID(), createdAt: new Date().toISOString(), status: "writing", progress: 5, message: "Writing a story worth listening to…", demo: false, workflow: request.mode === "topic" ? "scratch" : "upload", recipe: { mode: request.mode, audience: request.audience, targetWords: request.targetWords }, sourceText: request.text, settings: { ...DEFAULT_SETTINGS }, outputs: [] };
     this.jobs.set(job.id, job); this.requests.set(job.id, clean);
-    if (demo) job.result = new LessonService().create(clean, true).result!;
-    else if (request.mode === "script") {
+    if (request.mode === "script") {
       job.result = parseNarration(request.text);
       job.result.chunks = textFirstChunks(request.text); job.result.metadata.chunkCount = job.result.chunks.length;
       job.result.visualPlanning = { mode: "text-first", version: VISUAL_PLAN_VERSION };
@@ -108,7 +118,7 @@ export class ProductionService {
   }
   private scriptReady(job: LessonJob) {
     job.status = "script-ready"; job.progress = 30;
-    job.message = job.demo ? "Sample storyboard ready. No AI request was made." : !job.result?.chunks.some(c => c.renderHint === "image") ? "Your narration is saved. Add a Groq key to plan illustrations before making the final video." : "Your script and visual plan are saved. Choose a look, review the scenes, and generate the illustrations.";
+    job.message = !job.result?.chunks.some(c => c.renderHint === "image") ? "Your narration is saved. Add a Groq key to plan illustrations before making the final video." : "Your script and visual plan are saved. Choose a look, review the scenes, and generate the illustrations.";
   }
   private async writeScript(job: LessonJob, key: string, signal: AbortSignal) {
     const request = this.requests.get(job.id)!;
@@ -143,14 +153,15 @@ export class ProductionService {
     const job = this.jobs.get(id); if (!job) throw new RequestError("Lesson not found.", 404);
     if (running(job)) throw new RequestError("Wait for this stage to finish or stop it first.", 409);
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new RequestError("Send stage settings as JSON.");
-    this.checkCapacity();
     if (stage === "script") {
+      this.checkCapacity();
       if (job.result) throw new RequestError("The script is already saved.", 409);
       const key = requireKey(input.apiKey, "Groq"); job.status = "writing"; job.progress = 5;
       this.save(job); this.run(job, "script", async signal => this.writeScript(job, key, signal)); return job;
     }
     if (!job.result) throw new RequestError("Generate the script first.", 409);
     if (stage === "plan") {
+      this.checkCapacity();
       const key = requireKey(input.apiKey, "Groq");
       const settings = validateSettings(input.settings ?? {}, job.settings);
       // Upgrade only the exact old house preset; leave custom art direction intact.
@@ -182,7 +193,7 @@ export class ProductionService {
     // Recheck after asynchronous module loading to reject two simultaneous submissions.
     const helpers = await import(pathToFileURL(resolve(process.cwd(), "studio/lesson-images.mjs")).href);
     if (running(job)) throw new RequestError("This lesson is already running.", 409);
-    this.checkCapacity();
+    if (stage !== "settings") this.checkCapacity();
     const frames = job.result.chunks.filter(c => c.renderHint === "image").map(chunk => {
       const override = prompts[String(chunk.index)];
       let prompt: string;
@@ -198,6 +209,7 @@ export class ProductionService {
     job.settings = settings; job.frames = frames; job.scenePrompts = prompts;
     if (stage === "settings") { this.save(job); return job; }
     job.status = stage === "images" ? "images" : "voice";
+    if (stage === "video") job.operation = input.audioOnly ? "audio" : "video";
     job.progress = stage === "images" ? 35 : 75;
     job.message = stage === "images" ? "Drawing your lesson, one scene at a time…" : "Recording the exact script with speech timestamps…";
     this.save(job);
@@ -248,6 +260,8 @@ export class ProductionService {
         this.save(job);
         if (!input.audioOnly) {
           job.status = "rendering"; job.progress = 85;
+          job.message = "Assembling your video. The player will be ready when the MP4 is finished…";
+          this.save(job);
           await engine.renderVideo({ lesson: job.result!, alignment: voice.alignment, audioPath: voice.audioPath,
             mapping: Object.fromEntries(frames.filter(f => f.imageUrl).map(f => [f.chunkIndex, join(this.folder(id), "frames", `${f.version}.png`)])),
             fallbackText: settings.fallbackText, requireImageMajority: !settings.fallbackText, artStyle: settings.style, textStyle: settings.textStyle, ...DIMENSIONS[settings.videoAspect], outputDir, signal,
@@ -256,7 +270,7 @@ export class ProductionService {
           job.videoUrl = `${prefix}/video.mp4`; job.timelineUrl = `${prefix}/timeline.json`;
         }
         job.outputs ??= [];
-        job.outputs.push({ audioUrl: job.audioUrl, ...(!input.audioOnly ? { videoUrl: job.videoUrl! } : {}), createdAt: new Date().toISOString(), label: `${!input.audioOnly && settings.fallbackText ? "Text fallback preview · " : ""}${settings.videoAspect} · ${settings.model}${voice.cached ? " · saved voice reused" : ""}` });
+        job.outputs.push({ audioUrl: job.audioUrl, ...(!input.audioOnly ? { videoUrl: job.videoUrl!, timelineUrl: job.timelineUrl! } : {}), createdAt: new Date().toISOString(), label: `${!input.audioOnly && settings.fallbackText ? "Text fallback preview · " : ""}${settings.videoAspect} · ${settings.model}${voice.cached ? " · saved voice reused" : ""}` });
         job.status = input.audioOnly ? "audio-ready" : "complete"; job.progress = input.audioOnly ? 80 : 100;
         job.message = input.audioOnly ? "Voiceover saved. Create the MP4 next; this voice will be reused." : "That’s a wrap! Your video, source text, and script are saved in My lessons.";
       }

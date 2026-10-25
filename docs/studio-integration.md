@@ -10,15 +10,17 @@ The main app at port 3000 now owns the entire text/PDF → Groq script → Polli
 - Final MP4s require more than half their duration to show images, checked before voice generation and again using actual rendered frame timing. Explicit text-fallback previews are exempt and labeled in saved versions.
 - `studio/text-cards.mjs`: measured, centered typography with four matching art themes.
 - `src/server.ts`: lesson/stage routes, PDF imports, downloads, local media streaming with byte ranges.
-- `web/src/Production.tsx`: phased production UI, image gallery/prompt edits, voice selection, audio/video playback and saved text.
+- `web/src/Production.tsx`: phased production UI, persisted unfinished settings/prompt edits, voice selection and saved text.
+- `web/src/LessonPlayer.tsx`: a single media destination for rendering progress, playback, downloads and version selection; unfinished MP4 narration never appears as a separate player.
+- `web/src/lesson-workspace.ts`: independent upload/topic selections, background polling, immediate library entries, per-ID updates and stale-response protection.
 - `studio/images.mjs`, `studio/lesson-images.mjs`, `studio/video.mjs`: shared provider clients, prompts, caching, exact speech alignment and FFmpeg assembly.
 - `studio/archive/public/`: preserved standalone UI. `pnpm studio` opens it explicitly on port 4317. Its SQLite data remains untouched in `studio/data/`; new integrated projects use a separate folder.
 
 ## Main app API
 
 - `POST /api/lessons`: `{text, mode, audience, targetWords, apiKey}`. Material/topic modes require a Groq key. Script mode uses exact supplied narration with no writing request.
-- `GET /api/lessons`: durable library summaries.
-- `GET /api/lessons/:id`: current public state, result, frames, source text, settings and outputs. No credentials.
+- `GET /api/lessons`: durable library summaries, including workflow origin and current stage. Unsubmitted drafts and retired samples are excluded.
+- `GET /api/lessons/:id`: current public state, revision, workflow, recipe, result, frames, source text, settings and outputs. No credentials.
 - `POST /api/lessons/:id/script`: retry failed writing with `{apiKey}`.
 - `POST /api/lessons/:id/plan`: `{apiKey}` replans exact existing narration with Groq; commits only a complete valid plan and clears scene mappings, preserving prior output files. Completed batches/cooldowns live in `plan-cache/` without credentials.
 - `POST /api/lessons/:id/settings`: save `{settings, prompts}` without provider calls. Prompts map image chunk indexes to custom scene ideas.
@@ -36,6 +38,8 @@ Image and video aspects independently support landscape (1280 × 720), square (1
 ## Persistence and recovery
 
 The default store is `output/lessons/`, overridden with `LESSON_DATA_DIR`. Each UUID folder contains `project.json` (atomically replaced), `source.txt`, `script.txt`, `lesson.json`, `frames/`, `image-cache/`, `voice-cache/`, and `videos/` with immutable output versions. Preserve this folder to preserve the library. Serve one app process per data directory. Interrupted stages are marked for explicit continuation on startup. There is no automatic paid generation after restart.
+
+Upload/script and topic workflows each remember their own selected lesson and complete draft in local browser storage. Starting another lesson never cancels a previous job. Unapplied settings and prompt edits are keyed by lesson ID and the saved plan/settings they edit, so they survive navigation/reload without leaking into other lessons or overriding a newer visual plan. API keys remain in memory. Legacy `demo: true` records move to `.retired-samples/<id>/` on startup; no files are deleted. The old `/api/demo` endpoint returns 410 and cannot create more samples.
 
 The default image model is `black-forest-labs/flux.1-schnell`. Counts distinguish missing images, saved images and locally rendered text cards. Voice estimates are approximate and plan-dependent. Image prompts preserve narration meaning, vary composition, and apply a shared palette and drawing style and aspect-specific framing; generated identity consistency remains best effort. The voice stage supports scripts up to 10,000 characters, matching the original renderer validation. The bundled FFmpeg dependency is installed from the root package. Text cards use Canvas with system font fallbacks; they no longer require copying a Windows font file into the output. `displayText` carries the short caption while `text` and offsets remain exact narration. Image cache identity includes model, dimensions, prompt and per-scene seed.
 

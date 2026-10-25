@@ -1,4 +1,4 @@
-import type { LessonJob, LessonRequest, ServerHealth, PdfJob, PdfSource, PdfProgress, StageRequest } from "../../src/web-contract";
+import type { LessonJob, LessonRequest, LessonSummary, ServerHealth, PdfJob, PdfSource, PdfProgress, StageRequest } from "../../src/web-contract";
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) { super(message); }
@@ -14,7 +14,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  list: () => request<(Pick<LessonJob, "id" | "createdAt" | "demo" | "status"> & { title: string })[]>("/api/lessons"),
+  list: () => request<LessonSummary[]>("/api/lessons"),
   stage: (id: string, stage: string, body: StageRequest = {}) => request<LessonJob>(`/api/lessons/${encodeURIComponent(id)}/${stage}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   voices: (apiKey: string) => request<{ voices: { id: string; name: string }[] }>("/api/voices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey }) }),
   importPdf: async (file: File, onProgress: (progress: PdfProgress) => void, signal: AbortSignal): Promise<PdfSource> => {
@@ -42,6 +42,5 @@ export const api = {
   },
   health: () => request<ServerHealth>("/api/health"),
   create: (body: LessonRequest) => request<LessonJob>("/api/lessons", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
-  demo: () => request<LessonJob>("/api/demo", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }),
   lesson: (id: string, signal?: AbortSignal) => request<LessonJob>(`/api/lessons/${encodeURIComponent(id)}`, { signal }),
 };

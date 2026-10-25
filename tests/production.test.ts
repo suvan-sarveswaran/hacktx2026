@@ -12,6 +12,7 @@ import { createAppServer } from "../src/server.js";
 import type { LessonJob, LessonRequest } from "../src/web-contract.js";
 import { chunksFromBeats, imageTimeShare, textFirstChunks, VISUAL_PLAN_VERSION } from "../src/visual-plan.js";
 import { ART_STYLES, LEGACY_DOODLE_STYLE } from "../src/production-settings.js";
+import { validateLessonRequest } from "../src/lesson-service.js";
 
 const request: LessonRequest = { text: "A leaf catches sunlight. Water feeds the roots. Sugar powers the plant.", mode: "material", audience: "Students", targetWords: 150, apiKey: "groq-secret" };
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64");
@@ -250,4 +251,72 @@ test("interrupted stages recover on restart and custom prompts survive style cha
   await service.close(); const recovered = new ProductionService({ dataDir }); t.after(() => recovered.close());
   assert.equal(recovered.get(job.id)!.status, "failed"); assert.equal(recovered.get(job.id)!.failedStage, "images");
   assert.match(recovered.get(job.id)!.error!, /restart/); assert.equal(recovered.get(job.id)!.sourceText, request.text);
+});
+
+test("legacy sample records are retired once, while real lessons retain their workflow and recipe", async t => {
+  const dataDir = await mkdtemp(join(tmpdir(), "entertainify-samples-")); t.after(() => rm(dataDir, { recursive: true, force: true }));
+  const original = new ProductionService({ dataDir });
+  const sample = original.create({ ...request, mode: "script" });
+  const real = original.create({ ...request, mode: "script", targetWords: 75 });
+  await original.close();
+  const path = join(dataDir, sample.id, "project.json");
+  const record = JSON.parse(await readFile(path, "utf8")); record.job.demo = true;
+  await writeFile(path, JSON.stringify(record));
+  const restored = new ProductionService({ dataDir });
+  assert.deepEqual(restored.list().map(row => row.id), [real.id]);
+  assert.equal(restored.get(sample.id), undefined);
+  assert.equal(restored.get(real.id)!.workflow, "upload");
+  assert.equal(restored.get(real.id)!.recipe!.targetWords, 75);
+  assert.equal(JSON.parse(await readFile(join(dataDir, ".retired-samples", sample.id, "project.json"), "utf8")).job.demo, true);
+  await restored.close();
+  const again = new ProductionService({ dataDir }); t.after(() => again.close());
+  assert.equal(again.list().length, 1);
+  const server = await createAppServer(false, again);
+  await new Promise<void>(done => server.listen(0, "127.0.0.1", done));
+  t.after(() => new Promise<void>(done => server.close(() => done())));
+  const address = server.address(); if (!address || typeof address === "string") throw new Error("Missing server address");
+  assert.equal((await fetch(`http://127.0.0.1:${address.port}/api/demo`, { method: "POST" })).status, 410);
+  assert.equal(again.list().length, 1);
+});
+
+test("30-second topics and uploads remain separate across concurrent writing and restart", async t => {
+  const dataDir = await mkdtemp(join(tmpdir(), "entertainify-concurrent-")); t.after(() => rm(dataDir, { recursive: true, force: true }));
+  let finish!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const service = new ProductionService({ dataDir, generate: async (source, options) => {
+    assert.equal(options?.targetWords, 75); await gate; return parseNarration(source);
+  } });
+  const upload = service.create(validateLessonRequest({ ...request, targetWords: 75 }));
+  const topic = service.create(validateLessonRequest({ ...request, mode: "topic", targetWords: 75 }));
+  assert.equal(service.list().length, 2);
+  assert.equal(upload.status, "writing"); assert.equal(topic.status, "writing");
+  assert.equal(upload.workflow, "upload"); assert.equal(topic.workflow, "scratch");
+  finish(); await settled(upload); await settled(topic); await service.close();
+  const restored = new ProductionService({ dataDir }); t.after(() => restored.close());
+  assert.equal(restored.get(topic.id)!.workflow, "scratch");
+  assert.equal(restored.get(upload.id)!.recipe!.targetWords, 75);
+  assert.equal(restored.get(topic.id)!.status, "script-ready");
+});
+
+test("a pending MP4 stays rendering until finished and output versions keep their own voice and timings", async t => {
+  const dataDir = await mkdtemp(join(tmpdir(), "entertainify-premiere-")); t.after(() => rm(dataDir, { recursive: true, force: true }));
+  const { engine } = fakeEngine();
+  let finish!: () => void, entered!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const rendering = new Promise<void>(resolve => { entered = resolve; });
+  const render = engine.renderVideo;
+  engine.renderVideo = async options => { entered(); await gate; await render(options); };
+  const service = new ProductionService({ dataDir, engine: async () => engine }); t.after(() => service.close());
+  const lesson = service.create({ ...request, mode: "script" });
+  await service.advance(lesson.id, "video", { apiKey: "voice-secret", settings: { fallbackText: true } });
+  await rendering;
+  assert.equal(lesson.status, "rendering"); assert.equal(lesson.operation, "video");
+  assert.ok(lesson.audioUrl); assert.equal(lesson.videoUrl, undefined); assert.equal(lesson.outputs!.length, 0);
+  finish(); await settled(lesson);
+  const video = structuredClone(lesson.outputs![0]!);
+  assert.equal(video.videoUrl, lesson.videoUrl); assert.equal(video.timelineUrl, lesson.timelineUrl);
+  await service.advance(lesson.id, "video", { apiKey: "voice-secret", audioOnly: true }); await settled(lesson);
+  assert.equal(lesson.operation, "audio"); assert.equal(lesson.status, "audio-ready");
+  assert.notEqual(lesson.audioUrl, video.audioUrl);
+  assert.deepEqual(lesson.outputs![0], video); assert.equal(lesson.outputs![1]!.videoUrl, undefined);
 });
