@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
-import { readFile, mkdir, stat } from 'node:fs/promises';
+import { readFile, writeFile, rename, mkdir, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +14,8 @@ const MODEL = 'black-forest-labs/flux.1-schnell';
 export async function createApp({ dataDir = path.join(here, 'data'), generator = generateImages, initialKey = process.env.POLLINATIONS_API_KEY ?? '', voiceGenerator = synthesizeNarration, videoRenderer = renderVideo } = {}) {
   await mkdir(dataDir, { recursive: true });
   const outputDir = path.join(dataDir, 'images');
+  const lessonDir = path.join(dataDir, 'lessons');
+  await mkdir(lessonDir, { recursive: true });
   const db = new DatabaseSync(path.join(dataDir, 'studio.sqlite'));
   db.exec(`PRAGMA journal_mode=WAL;
     CREATE TABLE IF NOT EXISTS batches(id TEXT PRIMARY KEY, title TEXT NOT NULL, created TEXT NOT NULL, status TEXT NOT NULL, error TEXT);
@@ -68,9 +70,17 @@ export async function createApp({ dataDir = path.join(here, 'data'), generator =
       return {chunkIndex:c.index,prompt,promptHash,basePrompt:baseImagePrompt(lesson,c),status:scene?.status??'missing',sceneId:scene?.id??null,
         batchId:scene?.batch_id??null,imageUrl:scene?.file?`/images/${path.basename(scene.file)}`:null,error:scene?.error??null,cached:Boolean(scene?.cached)};
     });
-    return {id:row.id,title:row.title,style:row.style,...dimensions,lesson,frames,created:row.created,updated:row.updated,
+    return {id:row.id,title:row.title,style:row.style,...dimensions,lessonFile:`data/lessons/${row.id}.json`,lesson,frames,created:row.created,updated:row.updated,
       mapping:Object.fromEntries(frames.filter(f=>f.status==='completed').map(f=>[f.chunkIndex,f.sceneId]))};
   };
+  async function saveLessonFile(id) {
+    const project=getProject(id);
+    const target=path.join(lessonDir,`${id}.json`), temporary=target+`.${randomUUID()}.tmp`;
+    await writeFile(temporary,JSON.stringify({...project.lesson,artStyle:project.style,imageAspect:project.imageAspect},null,2)+'\n','utf8');
+    await rename(temporary,target);
+  }
+  // Rebuild readable snapshots from the authoritative database, including older lessons.
+  for(const row of db.prepare('SELECT id FROM projects').all())await saveLessonFile(row.id);
   const getBatch = id => {
     const batch = db.prepare('SELECT * FROM batches WHERE id=?').get(id);
     if (!batch) return null;
@@ -141,10 +151,11 @@ export async function createApp({ dataDir = path.join(here, 'data'), generator =
         catch(error){return json(res,400,{error:error.message});}
         const fingerprint=digest(JSON.stringify(lesson));
         const existing=db.prepare('SELECT id FROM projects WHERE fingerprint=?').get(fingerprint);
-        if(existing)return json(res,200,getProject(existing.id));
+        if(existing){await saveLessonFile(existing.id);return json(res,200,getProject(existing.id));}
         const id=randomUUID(),now=new Date().toISOString();
         db.prepare('INSERT INTO projects VALUES(?,?,?,?,?,?,?)').run(id,fingerprint,lesson.title,JSON.stringify(lesson),style,now,now);
         db.prepare('INSERT INTO project_image_settings VALUES(?,?)').run(id,dimensions.imageAspect);
+        await saveLessonFile(id);
         return json(res,201,getProject(id));
       }
       const projectMatch=url.pathname.match(/^\/api\/projects\/([a-f0-9-]+)(?:\/(settings|images|map|export))?$/);
@@ -163,6 +174,7 @@ export async function createApp({ dataDir = path.join(here, 'data'), generator =
           catch(error){return json(res,400,{error:error.message});}
           db.prepare('UPDATE projects SET title=?,lesson=?,style=?,updated=? WHERE id=?').run(lesson.title,JSON.stringify(lesson),style,new Date().toISOString(),id);
           db.prepare('INSERT OR REPLACE INTO project_image_settings VALUES(?,?)').run(id,dimensions.imageAspect);
+          await saveLessonFile(id);
           return json(res,200,getProject(id));
         }
         if(req.method==='POST'&&action==='map'){

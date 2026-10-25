@@ -44,6 +44,8 @@ test('one JSON → one/few/all styled images → cached audio → MP4; persisten
  assert.match(await (await fetch(base)).text(),/Generate your lesson images/);
  const created=await json(base,'/api/projects',{lesson:fixtureLesson(),style:'Purple pencil'});assert.equal(created.status,201);const id=created.body.id;
  assert.equal(created.body.frames.length,5);assert.equal(imageCalls,0);
+ const lessonSnapshot=path.join(dataDir,'lessons',`${id}.json`);
+ const savedUpload=JSON.parse(await readFile(lessonSnapshot,'utf8'));assert.equal(savedUpload.script,fixtureLesson().script);assert.equal(savedUpload.artStyle,'Purple pencil');assert.equal(created.body.lessonFile,`data/lessons/${id}.json`);
  const get=async()=>(await json(base,`/api/projects/${id}`)).body;
  async function generate(payload){const result=await json(base,`/api/projects/${id}/images`,payload);assert.equal(result.status,202);await until(async()=>(await json(base,`/api/batches/${result.body.batchId}`)).body,b=>b.status!=='running');return result.body;}
  assert.equal((await generate({mode:'one'})).count,1);let project=await get();assert.deepEqual(project.frames.filter(f=>f.status==='completed').map(f=>f.chunkIndex),[0]);
@@ -63,8 +65,9 @@ test('one JSON → one/few/all styled images → cached audio → MP4; persisten
  const exported=(await json(base,`/api/projects/${id}/export`)).body;assert.equal(exported.artStyle,'Purple pencil');assert.equal(exported.images.length,5);assert.equal(exported.chunks[0].imagePrompt,'A little leaf holding a spoon.');
  const edited=structuredClone(project.lesson);edited.visualRequirements={palette:'purple'};edited.chunks[0].requirements={mustInclude:'striped apron'};
  const update=await json(base,`/api/projects/${id}/settings`,{lesson:edited});assert.equal(update.status,200);assert.deepEqual(update.body.lesson.chunks[0].requirements,{mustInclude:'striped apron'});assert.ok(update.body.frames[0].prompt.includes('striped apron'));
+ const savedEdit=JSON.parse(await readFile(lessonSnapshot,'utf8'));assert.deepEqual(savedEdit.chunks[0].requirements,{mustInclude:'striped apron'});assert.deepEqual(savedEdit.visualRequirements,{palette:'purple'});
  const invalid=structuredClone(edited);invalid.chunks[0].startOffset=999;
- assert.equal((await json(base,`/api/projects/${id}/settings`,{lesson:invalid})).status,400);assert.deepEqual((await get()).lesson.chunks[0].requirements,{mustInclude:'striped apron'});
+ assert.equal((await json(base,`/api/projects/${id}/settings`,{lesson:invalid})).status,400);assert.deepEqual((await get()).lesson.chunks[0].requirements,{mustInclude:'striped apron'});assert.deepEqual(JSON.parse(await readFile(lessonSnapshot,'utf8')),savedEdit);
  await json(base,`/api/projects/${id}/settings`,{lesson:project.lesson});
  await app.close();app=await createApp(options);base=await listen(app.server);assert.deepEqual((await get()).mapping,originalIds);assert.equal((await json(base,'/api/projects')).body.projects.length,1);
  const reopened=await json(base,'/api/projects',{lesson:fixtureLesson()});assert.equal(reopened.body.id,id);assert.equal(imageCalls,5);

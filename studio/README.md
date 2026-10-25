@@ -132,6 +132,12 @@ Stitching uses local FFmpeg and consumes no API credits. Voice generation is not
 
 
 
+## Saved JSON files
+
+Every uploaded lesson is also saved as a readable JSON snapshot at `studio/data/lessons/<lesson-id>.json` (relative to the repository root). Applied JSON, prompt, style and aspect-ratio edits update that file. Metadata is retained, and the UI shows the path. Existing saved lessons get snapshots when Studio starts. The original file on your computer is unchanged. Snapshots use generated lesson IDs to prevent overwrites from identical filenames. They are ignored by Git with the rest of `data/`. Re-upload a snapshot through Choose JSON file to reuse it; use the saved-lesson selector to continue existing progress. The database remains the source of truth, so import changes made to a snapshot in an external editor through the website.
+
+For a new short test, upload `examples/studio-test-water-cycle.json` from the repository root. It has five full-sentence chunks with explicit scene prompts and landscape dimensions. No API is called until you press a generation button.
+
 ## Storage and recovery
 
 

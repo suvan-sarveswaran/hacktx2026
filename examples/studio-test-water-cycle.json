@@ -1,0 +1,53 @@
+{
+  "title": "Water cycle - five-scene test",
+  "script": "The sun warms a lake, giving water the energy to evaporate. High in the cooler sky, water vapor condenses into tiny droplets that form a cloud. When droplets grow heavy enough, water falls back to Earth as rain. Some water soaks into the ground, while some flows downhill into rivers and lakes. The water cycle keeps moving water around; the sun provides much of its energy.",
+  "chunks": [
+    {
+      "index": 0,
+      "text": "The sun warms a lake, giving water the energy to evaporate.",
+      "startOffset": 0,
+      "endOffset": 59,
+      "renderHint": "image",
+      "visualFocus": "evaporation",
+      "imagePrompt": "A small golden sun shines on a blue lake below. Three curved arrows rise from the lake to represent invisible water vapor. A single wide educational scene; no written labels."
+    },
+    {
+      "index": 1,
+      "text": "High in the cooler sky, water vapor condenses into tiny droplets that form a cloud.",
+      "startOffset": 60,
+      "endOffset": 143,
+      "renderHint": "image",
+      "visualFocus": "condensation",
+      "imagePrompt": "The same blue lake sits at the bottom of the frame. Above it, several tiny blue droplets gather into one soft white cloud. Show the droplets gathering clearly, with no written labels."
+    },
+    {
+      "index": 2,
+      "text": "When droplets grow heavy enough, water falls back to Earth as rain.",
+      "startOffset": 144,
+      "endOffset": 211,
+      "renderHint": "image",
+      "visualFocus": "precipitation",
+      "imagePrompt": "The same white cloud is now gray and releases blue raindrops onto the lake and a nearby green hill. One simple wide landscape, consistent lake and hill placement, no text."
+    },
+    {
+      "index": 3,
+      "text": "Some water soaks into the ground, while some flows downhill into rivers and lakes.",
+      "startOffset": 212,
+      "endOffset": 294,
+      "renderHint": "image",
+      "visualFocus": "collection",
+      "imagePrompt": "A cutaway of the same green hill beside the blue lake. One blue stream flows down the hill to the lake while a few blue arrows point into the soil. Clear uncluttered educational drawing, no text."
+    },
+    {
+      "index": 4,
+      "text": "The water cycle keeps moving water around; the sun provides much of its energy.",
+      "startOffset": 295,
+      "endOffset": 374,
+      "renderHint": "image",
+      "visualFocus": "water cycle",
+      "imagePrompt": "A complete water-cycle landscape using the same lake, hill, sun and cloud. Clear looping arrows connect rising vapor, cloud, rain and river. Keep the scene simple with a single continuous loop and no written labels."
+    }
+  ],
+  "imageAspect": "landscape",
+  "artStyle": "Simple flat educational illustrations with bold clean navy outlines, a warm cream background, blue water, green hills and a golden sun. Consistent landscape and palette across every frame. Clear geometric shapes and uncluttered composition. No text, labels, watermarks or photorealism."
+}

@@ -49,6 +49,7 @@ function setProject(value,{resetStyle=false}={}){
  if(resetStyle||!dirty){$('artStyle').value=value.style;$('imageAspect').value=value.imageAspect??'square';const preset=Object.keys(styles).find(k=>styles[k]===value.style);$('stylePreset').value=preset??'custom';dirty=false;}
  $('styleStatus').textContent=dirty?'UNSAVED CHANGES':'STYLE SAVED';
  $('lessonInfo').replaceChildren(el('strong',value.title),el('span',`${value.lesson.script.length} characters · ${value.lesson.chunks.length} chunks · ${value.frames.length} image prompts. Progress saves automatically.`));
+ $('lessonFileStatus').textContent=`JSON saved locally: studio/${value.lessonFile}`;
  $('exportLesson').href=`/api/projects/${value.id}/export`;$('exportLesson').classList.remove('disabled');$('exportLesson').setAttribute('aria-disabled','false');
  $('sourceStatus').textContent=sourceNames[value.id]?`Loaded: ${sourceNames[value.id]}`:`Saved lesson loaded: ${value.title}`;
  if(editorProjectId!==value.id){editorProjectId=value.id;jsonDirty=false;}
