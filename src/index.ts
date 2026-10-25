@@ -4,3 +4,4 @@ export { generateScript, DEFAULT_MODEL, MAX_SOURCE_CHARACTERS } from "./generato
 export type { ScriptOptions, GeneratedScript } from "./generator.js";
 export { chunkScript } from "./chunker.js";
 export type { ChunkOptions, ScriptChunk } from "./chunker.js";
+export type { ChunkRenderingHint } from "./render-hints.js";

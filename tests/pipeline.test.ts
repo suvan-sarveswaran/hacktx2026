@@ -22,7 +22,7 @@ test("the full pipeline preserves narration, creates usable chunks, and only req
 
   const result = await entertainify("Energy is conserved in an isolated system.", {
     ...requestOptions,
-    chunking: { minWords: 5, targetWords: 12, maxWords: 20, wordsPerMinute: 120 },
+    chunking: { maxWords: 8, wordsPerMinute: 120 },
   });
 
   assert.equal(fetchMock.mock.callCount(), 1);
@@ -36,7 +36,7 @@ test("the full pipeline preserves narration, creates usable chunks, and only req
     assert.equal(chunk.index, index);
     assert.equal(narration.slice(chunk.startOffset, chunk.endOffset), chunk.text);
     assert.match(narration.slice(previousEnd, chunk.startOffset), /^\s*$/u);
-    assert.ok(chunk.wordCount > 0 && chunk.wordCount <= 20);
+    assert.ok(chunk.wordCount > 0 && chunk.wordCount <= 8);
     assert.equal(chunk.estimatedDurationSeconds, chunk.wordCount / 2);
     previousEnd = chunk.endOffset;
   }

@@ -58,6 +58,27 @@ test("CLI splits inline narration without a key and keeps stdout as JSON", () =>
   assert.equal(processResult.stderr, "");
 });
 
+test("CLI splits narration into small visual words and phrases", () => {
+  const script = "A leaf is a tiny solar-powered kitchen, and somehow it runs without a group chat.";
+  const result = parsedResult(runCli(["--chunk-only", "--text", script]));
+  assertOfflineResult(result, script);
+  assert.deepEqual(result.chunks.map((chunk) => chunk.text), [
+    "A leaf is a",
+    "tiny",
+    "solar-powered",
+    "kitchen, and somehow it",
+    "runs without a",
+    "group chat.",
+  ]);
+});
+
+test("CLI keeps short sentences in separate chunks", () => {
+  const script = "Yes. No. Maybe.";
+  const result = parsedResult(runCli(["--chunk-only", "--text", script]));
+  assertOfflineResult(result, script);
+  assert.deepEqual(result.chunks.map((chunk) => chunk.text), ["Yes.", "No.", "Maybe."]);
+});
+
 test("CLI accepts a UTF-8 file and preserves the full narration", (context) => {
   const directory = temporaryDirectory(context);
   const sourcePath = join(directory, "narration.txt");
@@ -81,13 +102,16 @@ test("CLI creates nested output directories and writes parseable JSON", (context
   assertOfflineResult(JSON.parse(readFileSync(outputPath, "utf8")) as PipelineResult, narration);
 });
 
-test("CLI accepts chunk sizing and a decimal speaking rate", () => {
+test("CLI accepts a chunk safety limit and a decimal speaking rate", () => {
   const result = parsedResult(runCli([
     "--chunk-only", "--text", narration,
-    "--min-chunk-words", "2", "--target-chunk-words", "4", "--max-chunk-words", "8", "--wpm", "150.5",
+    "--max-chunk-words", "3", "--wpm", "150.5",
   ]));
   assertOfflineResult(result, narration);
-  assert.ok(result.chunks.every((chunk) => chunk.wordCount <= 8));
+  assert.ok(result.chunks.every((chunk) => chunk.wordCount <= 3));
+  for (const chunk of result.chunks) {
+    assert.equal(chunk.estimatedDurationSeconds, Number(((chunk.wordCount / 150.5) * 60).toFixed(3)));
+  }
 });
 
 test("CLI rejects conflicting input sources, empty input, unknown flags, and missing values", () => {
@@ -116,8 +140,8 @@ test("CLI rejects invalid numeric flags before generation", () => {
   const invalidOptions = [
     ["--words", "0"],
     ["--words", ""],
-    ["--min-chunk-words", "-1"],
-    ["--target-chunk-words", "1.5"],
+    ["--max-chunk-words", "-1"],
+    ["--max-chunk-words", "1.5"],
     ["--max-chunk-words", "lots"],
     ["--max-chunk-words", "9007199254740993"],
     ["--wpm", "0"],
@@ -158,5 +182,6 @@ test("CLI help works without input or credentials", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Usage:/);
   assert.match(result.stdout, /--chunk-only/);
+  assert.match(result.stdout, /--max-chunk-words/);
   assert.equal(result.stderr, "");
 });

@@ -6,7 +6,16 @@ The writing prompt asks for approachable explanations, dry humor, and useful vis
 
 ## Setup
 
-Install **Node.js 22.14 or newer**, then run:
+Install **Node.js 22.14 or newer** in your regular Windows environment from the [official Node.js download page](https://nodejs.org/en/download). **Node.js 24 LTS** is a suitable choice and includes npm. A runtime bundled with an editor or Codex may not be available in your terminal.
+
+After installation, restart your terminal and VS Code if it is open, then check:
+
+```sh
+node --version
+npm --version
+```
+
+From the project folder, install dependencies and create your configuration:
 
 ```sh
 npm install
@@ -21,6 +30,10 @@ npm start -- --input examples/source.txt --output output/lesson.json
 ```
 
 `npm start` loads `.env` automatically. Keep API keys out of source control. OpenAI generation requires an API key and may incur usage charges.
+
+TypeScript is a **local development dependency**, installed by `npm install`; a global `tsc` command is not required. `npm run build` uses the project's compiler, and `npx tsc --version` checks its version.
+
+If PowerShell blocks `npm.ps1` because of its execution policy, use `npm.cmd` and `npx.cmd` in place of `npm` and `npx` (for example, `npm.cmd install` and `npm.cmd run build`). This does not require changing your execution policy.
 
 A `pnpm-lock.yaml` is included for reproducible installs with `pnpm install --frozen-lockfile`. The equivalent `pnpm run build`, `pnpm start`, and `pnpm test` commands also work.
 
@@ -53,13 +66,13 @@ Try the chunker offline, without an API key:
 npm start -- --chunk-only --input examples/narration.txt --output output/chunks.json
 ```
 
-Tune the chunk length and estimated speaking speed:
+Tune the chunk safety limit and estimated speaking speed:
 
 ```sh
-npm start -- --chunk-only --input examples/narration.txt --min-chunk-words 6 --target-chunk-words 18 --max-chunk-words 32 --wpm 150
+npm start -- --chunk-only --input examples/narration.txt --max-chunk-words 8 --wpm 150
 ```
 
-`--words` controls the approximate total script length (50–2,000 words, default 450); `--target-chunk-words` controls the preferred length of each chunk. Source text is limited to 80,000 characters for generation. `--audience` accepts up to 300 characters, and `--model` overrides the configured generation model. Generation flags are rejected with `--chunk-only` to catch mistakes. Use `npm start -- --help` for all flags.
+`--words` controls the approximate total script length (50–2,000 words, default 450). `--max-chunk-words` sets a hard limit for a chunk; visual words usually produce shorter chunks. Source text is limited to 80,000 characters for generation. `--audience` accepts up to 300 characters, and `--model` overrides the configured generation model. Generation flags are rejected with `--chunk-only` to catch mistakes. Use `npm start -- --help` for all flags.
 
 ## Use from TypeScript
 
@@ -72,9 +85,7 @@ const lesson = await entertainify(
     targetWords: 400,
     audience: "high school biology students",
     chunking: {
-      minWords: 6,
-      targetWords: 18,
-      maxWords: 32,
+      maxWords: 8,
       wordsPerMinute: 150,
     },
   },
@@ -106,18 +117,63 @@ Each result includes:
 
 - `title`: the generated lesson title; `Provided narration` in chunk-only mode.
 - `script`: the complete narration, retained so future image prompts can use the context of the entire lesson.
-- `chunks`: ordered objects containing `index`, `text`, `startOffset`, `endOffset`, `wordCount`, and `estimatedDurationSeconds`.
+- `chunks`: ordered objects containing `index`, `text`, `startOffset`, `endOffset`, `wordCount`, `estimatedDurationSeconds`, and the rendering hints below.
 - `metadata`: `model`, `wordCount`, `chunkCount`, `estimatedDurationSeconds`, `generationMs`, and `chunkingMs`.
 
 Offsets locate chunks in the original `script` using JavaScript string indices: `script.slice(startOffset, endOffset)` gives the chunk text. Chunk-only mode uses `model: "none"` and `generationMs: 0`.
+
+Each chunk includes three fields to help choose a visual:
+
+| Field | Meaning |
+| --- | --- |
+| `renderHint` | `"image"` when the chunk contains a likely visual subject, modifier, or action; otherwise `"text"`. |
+| `visualFocus` | The word or phrase to use as an image prompt's starting point, or `null` for a text hint. |
+| `renderReason` | A readable explanation of the suggestion. |
+
+For example, `"use light to help"` is one chunk with `renderHint: "image"` and `visualFocus: "light"`. Standalone fragments such as `"use"`, `"help"`, or `"idea"` receive `renderHint: "text"` and `visualFocus: null`.
+
+Your future video renderer can use these hints to choose an image or an on-screen word:
+
+```ts
+const visualPlan = lesson.chunks.map((chunk) => {
+  if (chunk.renderHint === "text") {
+    return { kind: "text" as const, text: chunk.text };
+  }
+
+  // Pass these inputs to your future image-prompt stage.
+  return {
+    kind: "image" as const,
+    focus: chunk.visualFocus,
+    narration: chunk.text,
+    scriptContext: lesson.script,
+  };
+});
+```
+
+These are local heuristic suggestions, not guaranteed judgments of imageability or calibrated probabilities. The renderer can override them. An unfamiliar noun can still be ambiguous, while a scientific term may make an excellent diagram when interpreted using the full script.
 
 Duration estimates come from word counts and the configured speaking rate. They do **not** account for the actual voice, punctuation pauses, or delivery speed. Once text-to-speech is added, use the audio's word or character alignment to derive real image transition times.
 
 ## Why split locally?
 
-Only script generation needs an LLM request. Local splitting avoids a second network request and token cost, and is deterministic and fast enough that parallelizing it adds little value. The splitter looks for sentence endings, punctuation, and conjunctions while balancing chunk lengths. It is a heuristic: punctuation and conjunctions do not always mark a useful visual change, so inspect the chunks for your material. An LLM or an editing pass could improve scene selection later at the cost of latency.
+Only script generation needs an LLM request. The chunker uses the local `compromise` English part-of-speech tagger to identify nouns, descriptive modifiers, and action verbs as possible image changes, with lists of common vague and abstract terms to refine the rendering hints. Splitting and classification need no extra API request. Ordinary adverbs and grammatical words do not start new chunks. Compound nouns such as “group chat” stay together, and hyphenated words such as “solar-powered” stay intact.
 
-Defaults are 8 minimum, 24 target, and 40 maximum words per chunk, at 150 words per minute. The minimum and target are preferences; the maximum is enforced. Short sentences can share a chunk, while long sentences can split at clause boundaries. Word counts and pause rules are intended for English narration with whitespace-separated words.
+A chunk begins at each significant word or phrase, with any introductory words attached to the first one. Connecting words stay with the preceding chunk until the next visual word. Commas and conjunctions do not create their own boundaries. Sentences always stay separate, including very short ones. For example:
+
+```text
+A leaf is a tiny solar-powered kitchen, and somehow it runs without a group chat.
+
+→ "A leaf is a"
+→ "tiny"
+→ "solar-powered"
+→ "kitchen, and somehow it"
+→ "runs without a"
+→ "group chat."
+```
+
+Chunks are typically 1–5 words. The default safety limit is **8 words per chunk**, at an estimated **150 words per minute**. The word limit is enforced even if a long compound or run of connecting words needs to be split. Word counts use whitespace-separated words. Part-of-speech tags are a heuristic for English narration, so ambiguous wording, unfamiliar technical vocabulary, or abstract words may still need a review when choosing images.
+
+Generic verbs such as “use” and “help” attach to adjacent content when possible, within the same sentence and the word limit. This avoids unnecessary fragments such as `"use"`, `"light to"`, and `"help"`, combining them into `"use light to help"`. If a fragment still has no clear visual focus, its text hint lets the video display the words instead.
 
 PDF parsing, image prompt generation, image generation, voice synthesis, and video assembly are future stages. They are not included in this starter.
 

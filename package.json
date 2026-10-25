@@ -7,7 +7,9 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": "./dist/index.js",
-  "engines": { "node": ">=22.14.0" },
+  "engines": {
+    "node": ">=22.14.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
@@ -17,5 +19,8 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "compromise": "14.19.0"
   }
 }

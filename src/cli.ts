@@ -25,14 +25,13 @@ Output:
       --model <name>              Override OPENAI_MODEL
 
 Chunking:
-      --min-chunk-words <number>  Minimum desired words per chunk
-      --target-chunk-words <n>    Preferred words per chunk
-      --max-chunk-words <number>  Maximum words per chunk
-      --wpm <number>              Speaking rate for duration estimates
+      --max-chunk-words <number>  Safety limit per visual chunk (default: 8)
+      --wpm <number>              Speaking rate for duration estimates (default: 150)
 
   -h, --help                     Show this help
 
 Generation requires OPENAI_API_KEY. npm start loads .env if it exists.
+Chunks begin at visual words or phrases and stay within sentence boundaries.
 Chunk timings are estimates; align them to the voiceover before rendering video.
 `;
 
@@ -79,8 +78,6 @@ async function main(): Promise<void> {
       audience: { type: "string" },
       model: { type: "string" },
       "chunk-only": { type: "boolean", default: false },
-      "min-chunk-words": { type: "string" },
-      "target-chunk-words": { type: "string" },
       "max-chunk-words": { type: "string" },
       wpm: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
@@ -100,13 +97,9 @@ async function main(): Promise<void> {
   const model = nonempty(values.model, "--model");
   const audience = nonempty(values.audience, "--audience");
   const targetWords = positiveInteger(values.words, "--words");
-  const minWords = positiveInteger(values["min-chunk-words"], "--min-chunk-words");
-  const chunkTargetWords = positiveInteger(values["target-chunk-words"], "--target-chunk-words");
   const maxWords = positiveInteger(values["max-chunk-words"], "--max-chunk-words");
   const wordsPerMinute = positiveNumber(values.wpm, "--wpm");
   const chunking = {
-    ...(minWords === undefined ? {} : { minWords }),
-    ...(chunkTargetWords === undefined ? {} : { targetWords: chunkTargetWords }),
     ...(maxWords === undefined ? {} : { maxWords }),
     ...(wordsPerMinute === undefined ? {} : { wordsPerMinute }),
   };
