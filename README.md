@@ -4,6 +4,19 @@ Turn educational text into an entertaining, factual YouTube narration script and
 
 The writing prompt asks for approachable explanations, dry humor, and useful visual analogies while keeping the teaching content grounded in the supplied material. The narration uses an original, conversational voice.
 
+## Images, narration and MP4 Studio
+
+The image/voice/video application lives in [`studio/`](studio/README.md), with its own local browser interface and SQLite storage. It accepts the unchanged lesson JSON produced by this app, generates Pollinations images, synthesizes ElevenLabs narration, and stitches an MP4 locally.
+
+```sh
+npm --prefix studio install
+npm run studio
+```
+
+Open **http://127.0.0.1:4317/video**. On Windows, you can also double-click **Start Image and Video Studio.cmd**. Studio requires Node.js **24+**. Run its checks with `npm run test:studio`; tests use mocks and do not spend AI credits.
+
+For now, download a lesson JSON from the dashboard at port 3000 and upload it into Studio at port 4317. The automatic renderer adapter is not connected yet. See [Studio integration and upload preparation](docs/studio-integration.md) for the boundary and the branch workflow. Keep provider keys and generated assets local; `studio/data/`, dependencies, caches and `.env` files are ignored by Git.
+
 ## Interactive dashboard
 
 Entertainify now includes a React + Tailwind dashboard with custom SVG doodles and pixel sprites, an interactive comic landing page, expanding full-screen panels, a drawing pad, and a lesson studio. Fonts are bundled locally; no external image or font service is needed.

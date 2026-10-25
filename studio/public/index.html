@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entertainify · Image Studio</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<header><a class="brand" href="/"><span class="mark">e<span>✳</span></span>entertainify<span class="brand-sub">/ image studio</span></a><a class="secondary" href="/video">Voice + MP4 studio ↗</a><span class="local"><i></i> LOCAL WORKSPACE</span></header>
+<main>
+<div class="intro"><div><div class="eyebrow">FROM A THOUGHT TO A FRAME</div><h1>Give your lesson<br>a little <em>character.</em></h1><p>Test a single image. Build a sequence. Keep every frame.</p></div><div class="model-card"><div class="eyebrow">YOUR IMAGE MODEL</div><strong>FLUX.1 Schnell <span>↗</span></strong><p>1024 × 1024 · two parallel generations</p><div class="model-bottom"><span>≈ 0.002 Pollen / image</span><span class="pill">QUEST ELIGIBLE*</span></div></div></div>
+<div id="notice" class="notice" role="status" hidden></div>
+<div class="workspace">
+<section class="composer panel"><div class="section-head"><h2><span class="step">01</span> Set the scene</h2><button id="example" class="text-button">Use sample prompts</button></div>
+<details id="connection"><summary><span id="keyDot" class="dot"></span><span id="keyStatus">Connect Pollinations</span><span class="summary-right">API key</span></summary><div class="connection-body"><label for="apiKey">Secret key</label><div class="key-row"><input id="apiKey" type="password" placeholder="sk_…" autocomplete="off" spellcheck="false"><button id="saveKey" class="secondary">Connect</button></div><p>Kept in server memory for this session. Never saved in the gallery or browser storage. <a href="https://enter.pollinations.ai/keys" target="_blank" rel="noreferrer">Get a key ↗</a></p></div></details>
+<label for="batchTitle">Sequence name <span class="optional">optional</span></label><input id="batchTitle" maxlength="100" placeholder="The surprisingly dramatic life of a cell">
+<div class="label-row"><label for="prompts">Image prompts</label><label class="file-label">Import JSON <input id="importFile" type="file" accept=".json,application/json" hidden></label></div>
+<textarea id="prompts" spellcheck="false" rows="13" placeholder="Describe an image…&#10;&#10;Leave a blank line before your next prompt."></textarea>
+<div class="input-meta"><span id="promptCount">0 prompts</span><span>Separate prompts with a blank line</span></div>
+<div class="run-options"><label>Batch size <select id="count"><option value="1">1 image · first test</option><option value="5">5 images · sequence test</option></select></label><div class="estimate"><span>Estimated cost</span><strong id="estimate">≈ 0.002 Pollen</strong></div></div>
+<button id="generate" class="primary">Generate 1 image <span>↗</span></button><p class="fine-print">This button spends your Pollen. Estimate uses the price you shared; actual provider pricing and retries may differ. Repeated identical prompts reuse saved images.</p>
+</section>
+<section class="library panel"><div class="section-head"><h2><span class="step">02</span> Your sequence</h2><span id="batchBadge" class="pill">READY WHEN YOU ARE</span></div><div class="library-toolbar"><select id="batches" aria-label="Saved sequences"><option value="">No saved sequences yet</option></select><button id="refresh" class="icon-button" aria-label="Refresh gallery">↻</button></div><div class="progress-wrap" hidden id="progressWrap"><div class="progress-label"><span id="progressText">Starting…</span><button class="text-button" id="stop">Stop batch</button></div><progress id="progress" value="0" max="1"></progress></div>
+<div class="gallery" id="gallery"><div class="empty"><div class="frame-stack"><div></div><div></div><div>✳</div></div><h3>A story starts with one frame.</h3><p>Your images will appear here, in order.<br>They stay saved when you close the browser.</p></div></div>
+<div class="library-footer"><div><span class="storage-dot"></span> Saved locally · SQLite + image files</div><div class="actions"><button id="resume" class="secondary" hidden>Resume</button><button id="preview" class="secondary" disabled>▶ Play sequence</button><a id="export" class="export disabled" aria-disabled="true">Export JSON ↗</a></div></div>
+</section>
+</div>
+<footer><span>SMALL TESTS. BETTER STORIES.</span><span>*Subject to your account and current model access. No generation happens on page load.</span></footer>
+</main>
+<dialog id="player"><div class="player-head"><strong id="playerTitle">Sequence preview</strong><button id="closePlayer" class="icon-button" aria-label="Close preview">×</button></div><img id="playerImage" alt=""><div class="player-bottom"><button id="previousFrame" class="secondary" aria-label="Previous frame">←</button><span id="frameLabel"></span><button id="nextFrame" class="secondary" aria-label="Next frame">→</button></div><p>3 seconds per frame · visual preview, without narration</p></dialog>
+<script src="/app.js" type="module"></script>
+</body></html>
