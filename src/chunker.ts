@@ -9,6 +9,9 @@ export interface ChunkOptions {
 }
 
 export interface ScriptChunk extends ChunkRenderingHint {
+  /** Art-neutral scene direction selected by the visual planner. */
+  imagePrompt?: string;
+  displayText?: string;
   index: number;
   text: string;
   /** Inclusive UTF-16 offset in the original JavaScript string. */

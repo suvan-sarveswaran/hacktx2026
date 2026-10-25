@@ -6,6 +6,7 @@ import type { LessonJob, LessonRequest, ServerHealth, PdfProgress, PdfSource } f
 import { Book, Brain, Pencil, Pixel, Spark } from "./Art";
 import { readLessonFile } from "./files";
 import { api } from "./api";
+import { ApiKeyField, Production } from "./Production";
 
 const suggestions = [
   { label: "Tiny cell, big energy", text: "Teach me about mitochondria at a 7th grade level.", icon: "✳" },
@@ -24,9 +25,10 @@ interface StudioProps {
   onDemo: () => void;
   onReset: () => void;
   onRetryConnection: () => void;
+  onUpdate: (job: LessonJob) => void;
 }
 
-export function Studio({ kind, job, busy, error, health, onGenerate, onDemo, onReset, onRetryConnection }: StudioProps) {
+export function Studio({ kind, job, busy, error, health, onGenerate, onDemo, onReset, onRetryConnection, onUpdate }: StudioProps) {
   const storageKey = `entertainify-draft-${kind}`;
   const [text, setText] = useState(() => { try { return sessionStorage.getItem(storageKey) ?? ""; } catch { return ""; } });
   const [audience, setAudience] = useState("Middle school students (grades 6–8)");
@@ -35,6 +37,7 @@ export function Studio({ kind, job, busy, error, health, onGenerate, onDemo, onR
   const [fileError, setFileError] = useState("");
   const [dragging, setDragging] = useState(false);
   const [scriptMode, setScriptMode] = useState(false);
+  const [groqKey, setGroqKey] = useState("");
   const [loadingFile, setLoadingFile] = useState(false);
   const [fileProgress, setFileProgress] = useState<PdfProgress | null>(null);
   const [pdfInfo, setPdfInfo] = useState<Omit<PdfSource, "text"> | null>(null);
@@ -71,9 +74,11 @@ export function Studio({ kind, job, busy, error, health, onGenerate, onDemo, onR
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!text.trim() || loadingFile) return;
-    onGenerate({ text, mode: kind === "scratch" ? "topic" : scriptMode ? "script" : "material", audience, targetWords });
+    onGenerate({ text, mode: kind === "scratch" ? "topic" : scriptMode ? "script" : "material", audience, targetWords, ...(groqKey.trim() ? { apiKey: groqKey } : {}) });
+    setGroqKey("");
   }
 
+  if (job && !job.demo) return <div className="studio-content"><Production key={job.id} job={job} onUpdate={onUpdate} onReset={onReset} connectionError={error} onRetryConnection={onRetryConnection}/></div>;
   if (job || busy) return <div className="studio-content"><LessonOutput job={job} busy={busy} error={error} onReset={onReset} onRetryConnection={onRetryConnection} /></div>;
 
   return <div className="studio-content">
@@ -92,12 +97,12 @@ export function Studio({ kind, job, busy, error, health, onGenerate, onDemo, onR
         <div className="flex justify-between gap-3 mb-2"><label htmlFor="lesson-text" className="eyebrow">{kind === "scratch" ? "WHAT ARE WE LEARNING?" : "YOUR SOURCE TEXT"}</label><span className="text-counter">{wordCount.toLocaleString()} words</span></div>
         <textarea id="lesson-text" className={kind === "scratch" ? "topic-textarea" : "source-textarea"} required disabled={loadingFile} maxLength={80_000} value={text} onChange={(e) => { setText(e.target.value); setFileName(""); setFileError(""); }} placeholder={kind === "scratch" ? "Teach me about mitochondria at a 7th grade level. Make it feel like the world's tiniest office…" : "Chapter 4: The incredibly important thing you almost fell asleep reading…"} />
         <div className="flex justify-between items-center mt-2 gap-3"><span className="input-note">{kind === "scratch" ? "A topic, a question, a wildly specific curiosity." : "A short chapter or a few pages works best."}</span><span className="text-counter">{text.length.toLocaleString()} / 80,000</span></div>
-        {kind === "scratch" ? <div className="suggestions"><span className="handwriting">or borrow a little inspiration ↴</span>{suggestions.map((s) => <button type="button" key={s.label} onClick={() => setText(s.text)}><span>{s.icon}</span>{s.label}<ArrowRight size={14}/></button>)}</div> : <label className="script-checkbox"><input type="checkbox" checked={scriptMode} onChange={(e) => setScriptMode(e.target.checked)}/><span>I already have a narration script. Keep my words.<small>Skips AI writing and splits your script into scenes.</small></span></label>}
+        {kind === "scratch" ? <div className="suggestions"><span className="handwriting">or borrow a little inspiration ↴</span>{suggestions.map((s) => <button type="button" key={s.label} onClick={() => setText(s.text)}><span>{s.icon}</span>{s.label}<ArrowRight size={14}/></button>)}</div> : <label className="script-checkbox"><input type="checkbox" checked={scriptMode} onChange={(e) => setScriptMode(e.target.checked)}/><span>I already have a narration script. Keep my words.<small>Keeps your words as text cards. Add a visual plan in the next step.</small></span></label>}
       </div>
-      <aside className="recipe-card"><span className="eyebrow">YOUR LESSON RECIPE</span><div className="recipe-doodle"><Spark className="w-10"/><span className="handwriting">one order of “ohhh, I get it”</span></div><label htmlFor="audience">Who’s watching?</label><select id="audience" value={audience} onChange={(e) => setAudience(e.target.value)} disabled={scriptMode && kind === "upload"}><option>Curious beginners (all ages)</option><option>Middle school students (grades 6–8)</option><option>High school students (grades 9–12)</option><option>College students</option></select><label htmlFor="length">How much story?</label><select id="length" value={targetWords} onChange={(e) => setTargetWords(Number(e.target.value))} disabled={scriptMode && kind === "upload"}><option value={150}>A quick bite · ~1 minute</option><option value={300}>The sweet spot · ~2 minutes</option><option value={600}>A deeper dive · ~4 minutes</option><option value={900}>The full story · ~6 minutes</option></select><p className="input-note">Approximate time at 150 words/minute.</p><div className="recipe-style"><span className="eyebrow">THE HOUSE STYLE</span><p>Little doodles.<br/>Dry humor.<br/>Actual learning.</p><span className="style-stamp">100% LESS ZZZ</span></div><button type="submit" className="ink-button primary" disabled={!text.trim() || busy || loadingFile}>{scriptMode && kind === "upload" ? "Make my scene plan" : "Entertain my brain"}<ArrowRight size={19}/></button><p className="privacy-note">{scriptMode && kind === "upload" ? "Your words are split locally. No AI writing request is made." : "Your notes go to the configured AI provider to make your lesson. No account needed."}</p></aside>
+      <aside className="recipe-card"><span className="eyebrow">YOUR LESSON RECIPE</span><div className="recipe-doodle"><Spark className="w-10"/><span className="handwriting">one order of “ohhh, I get it”</span></div><label htmlFor="audience">Who’s watching?</label><select id="audience" value={audience} onChange={(e) => setAudience(e.target.value)} disabled={scriptMode && kind === "upload"}><option>Curious beginners (all ages)</option><option>Middle school students (grades 6–8)</option><option>High school students (grades 9–12)</option><option>College students</option></select><label htmlFor="length">How much story?</label><select id="length" value={targetWords} onChange={(e) => setTargetWords(Number(e.target.value))} disabled={scriptMode && kind === "upload"}><option value={150}>A quick bite · ~1 minute</option><option value={300}>The sweet spot · ~2 minutes</option><option value={600}>A deeper dive · ~4 minutes</option><option value={900}>The full story · ~6 minutes</option></select><p className="input-note">Approximate time at 150 words/minute.</p><div className="recipe-style"><span className="eyebrow">THE HOUSE STYLE</span><p>Little doodles.<br/>Dry humor.<br/>Actual learning.</p><span className="style-stamp">100% LESS ZZZ</span></div>{!(scriptMode && kind === "upload") && <><span className="eyebrow">STEP 01 / WRITE THE STORY</span><ApiKeyField provider="Groq" value={groqKey} onChange={setGroqKey}/></>}<button type="submit" className="ink-button primary" disabled={!text.trim() || busy || loadingFile || (!(scriptMode && kind === "upload") && !groqKey.trim())}>{scriptMode && kind === "upload" ? "Make my scene plan" : "Entertain my brain"}<ArrowRight size={19}/></button><p className="privacy-note">{scriptMode && kind === "upload" ? "Your words become text cards locally. Groq can plan illustrations next." : "Groq writes the script and scene prompts in one request. Then add Pollinations for pictures and ElevenLabs for voice + video. For the free tier, start with a quick bite and a short source."}</p></aside>
     </form>
     {(error || fileError) && <div role="alert" className="error-box"><strong>A tiny plot twist.</strong> {fileError || error}</div>}
-    {health && !health.generationConfigured && !(scriptMode && kind === "upload") && <p className="connection-note">AI writing isn’t connected yet. You can still <button onClick={onDemo}>explore the sample lesson</button>{kind === "upload" ? " or parse an existing narration using the checkbox above." : "."}</p>}
+
     <div className="studio-bottom"><span className="handwriting">No pop quiz. We promise.</span><button type="button" className="text-link" onClick={onDemo}>Just looking? Try a sample <ArrowRight size={15}/></button></div>
   </div>;
 }

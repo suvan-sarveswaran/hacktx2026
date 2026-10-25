@@ -323,7 +323,7 @@ export async function createApp({ dataDir = path.join(here, 'data'), generator =
         '/video':['video.html','text/html; charset=utf-8'],'/video.js':['video.js','text/javascript; charset=utf-8'],'/video.css':['video.css','text/css; charset=utf-8'],
         '/example-lesson.json':['example-lesson.json','application/json; charset=utf-8']};
       if(req.method==='GET' && assets[url.pathname]) {
-        const [file,type]=assets[url.pathname];res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-cache'});return res.end(await readFile(path.join(here,'public',file)));
+        const [file,type]=assets[url.pathname];res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-cache'});return res.end(await readFile(path.join(here,'archive','public',file)));
       }
       json(res,404,{error:'Not found'});
     } catch(error) {json(res,error.status ?? (error.code==='ENOENT'?404:500),{error:error.code==='ENOENT'?'File not found':error.message});}

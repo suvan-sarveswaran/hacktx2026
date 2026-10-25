@@ -1,3 +1,5 @@
+> **Archived standalone interface:** Use the root app (`npm run dev`) for the integrated text/PDF-to-video flow. Original screens are preserved in `archive/public/`. The modules in this directory remain shared by the main app. Install dependencies from the repository root with `npm install` before using the archived app; the shared text-card renderer uses the root Canvas dependency. Start the archived app from the root with `npm run studio`. The instructions below describe the retained standalone app.
+
 # Entertainify Lesson Studio
 
 

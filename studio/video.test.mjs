@@ -4,6 +4,8 @@ import { mkdtemp, rm, writeFile, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { validateLesson, characterTimings, createTimeline, synthesizeNarration, renderVideo, runFfmpeg, wavDuration } from './video.mjs';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { createTextCard, resolveTextTheme, textLayout } from './text-cards.mjs';
 
 function lessonOf(parts) {
   const script=parts.join(' ');let offset=0;
@@ -14,7 +16,7 @@ function wav(seconds=2) {
   const bytes=Buffer.alloc(44+48000*2*seconds);bytes.write('RIFF');bytes.writeUInt32LE(bytes.length-8,4);bytes.write('WAVEfmt ',8);bytes.writeUInt32LE(16,16);bytes.writeUInt16LE(1,20);bytes.writeUInt16LE(1,22);bytes.writeUInt32LE(48000,24);bytes.writeUInt32LE(96000,28);bytes.writeUInt16LE(2,32);bytes.writeUInt16LE(16,34);bytes.write('data',36);bytes.writeUInt32LE(bytes.length-44,40);return bytes;
 }
 test('the provided 76-chunk example retains exact original offsets',async()=>{
- const lesson=validateLesson(JSON.parse(await readFile(new URL('./public/example-lesson.json',import.meta.url),'utf8')));
+ const lesson=validateLesson(JSON.parse(await readFile(new URL('./archive/public/example-lesson.json',import.meta.url),'utf8')));
  assert.equal(lesson.chunks.length,76);assert.equal(lesson.script.length,969);
  assert.throws(()=>validateLesson({...lesson,script:' '+lesson.script}),/offsets/);
 });
@@ -32,6 +34,48 @@ test('chunk starts drive absolute frame boundaries, focus optional, missing imag
  assert.throws(()=>createTimeline(lesson,alignment,2),/no mapped image/);
  lesson.chunks[0].visualFocus='red';const focus=createTimeline(lesson,alignment,2,{mapping:{0:'red.png',2:'blue.png'},cutMode:'focus'});
  assert.equal(focus.scenes[0].chunkIndex,null);assert.equal(focus.scenes[1].alignedStart,.1);
+});
+
+test('display captions do not change spoken words or aligned cut times',()=>{
+ const lesson=lessonOf(['A leaf absorbs energy.','Energy changes form.']);
+ lesson.chunks[1].displayText='Never created';
+ const timeline=createTimeline(lesson,alignmentOf(lesson.script,.05),3,{mapping:{0:'leaf.png'}});
+ assert.equal(timeline.scenes[1].text,'Energy changes form.');
+ assert.equal(timeline.scenes[1].displayText,'Never created');
+ assert.equal(timeline.scenes[1].sourceOffset,lesson.chunks[1].startOffset);
+});
+
+test('final cuts require images for more than half the actual frames, including pauses and trailing audio',()=>{
+ const lesson=lessonOf(['Red.','Text.','Blue.']),alignment=alignmentOf(lesson.script,.1);
+ const options={mapping:{0:'red.png',2:'blue.png'},requireImageMajority:true};
+ assert.equal(createTimeline(lesson,alignment,2,options).imageTimeShare,.7);
+ // Two of three scenes are images, but the long middle card consumes most frames.
+ const slowText={...alignment,character_start_times_seconds:alignment.character_start_times_seconds.map(t=>t>=1.1?t+2:t),character_end_times_seconds:alignment.character_end_times_seconds.map(t=>t>=1.1?t+2:t)};
+ assert.throws(()=>createTimeline(lesson,slowText,4,options),/half the video or less/);
+ const equal=lessonOf(['Red.','Text.']);
+ assert.throws(()=>createTimeline(equal,alignmentOf(equal.script,.1),1,{...options,mapping:{0:'red.png'}}),/half the video or less/);
+ assert.throws(()=>createTimeline(equal,alignmentOf(equal.script,.1),10,{...options,mapping:{0:'red.png'}}),/half the video or less/);
+ assert.doesNotThrow(()=>createTimeline(equal,alignmentOf(equal.script,.1),10,{fallbackText:true}));
+});
+
+test('text cards match all art styles and fit landscape, portrait and square safe areas',async()=>{
+ const hashes=new Set();
+ for(const name of ['doodle','vector','pencil','cinematic']) {
+  for(const [width,height] of [[1280,720],[720,1280],[1024,1024]]) {
+   const theme=resolveTextTheme(name);assert.equal(theme.name,name);
+   const ctx=createCanvas(width,height).getContext('2d');
+   for(const text of ['Energy changes form','A much longer sentence still has to fit inside the safe margins.', 'Pneumonoultramicroscopicsilicovolcanoconiosis']) {
+    const layout=textLayout(ctx,text,width,height,theme.font);
+    assert.ok(layout.lines.every(line=>ctx.measureText(line).width<=width*.78));
+    assert.ok(layout.lines.length*layout.lineHeight<=height*.67);
+   }
+   const bytes=createTextCard({text:'Energy changes form',width,height,textStyle:name});
+   const decoded=await loadImage(bytes);assert.equal(decoded.width,width);assert.equal(decoded.height,height);
+   hashes.add(bytes.toString('base64'));
+  }
+ }
+ assert.equal(hashes.size,12);
+ assert.equal(resolveTextTheme('cinematic','vector').name,'vector');
 });
 test('voice request uses the complete unchanged script; result cached without another charge',async t=>{
  const dir=await mkdtemp(path.join(tmpdir(),'entertainify-voice-'));t.after(()=>rm(dir,{recursive:true,force:true}));let calls=0;

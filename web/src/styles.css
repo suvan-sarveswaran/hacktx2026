@@ -1,5 +1,58 @@
 @import "tailwindcss";
 
+/* The production desk shares the comic's paper, ink, and pastel palette. */
+.phase-strip {display:grid;grid-template-columns:repeat(4,1fr);gap:12px;list-style:none;padding:0;margin:30px 0}
+.phase-strip li {display:flex;align-items:center;gap:10px;padding:15px 12px;border:2px solid var(--ink);border-radius:10px;background:#fff9e9;font-size:14px;opacity:.65}
+.phase-strip li.current {background:var(--yellow);box-shadow:3px 4px 0 var(--ink);opacity:1}
+.phase-strip li.done {background:var(--green);opacity:1}
+.phase-strip li>span {font:12px var(--font-mono);display:grid;place-items:center;width:25px;height:25px;flex-shrink:0}
+.production-status {padding:20px 24px;background:#fff9ed;border:2px solid var(--ink);border-radius:12px;margin:24px 0}
+.production-status .progress-track {margin-top:16px}
+.phase-layout {display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:start;margin:28px 0}
+.phase-card {padding:26px;background:#fffaf0;border:2px solid var(--ink);border-radius:14px;box-shadow:4px 5px 0 #28271f;margin-bottom:24px;min-width:0}
+.phase-layout .phase-card {margin:0}
+.phase-title {display:flex;gap:14px;align-items:center;margin-bottom:24px}
+.phase-title h2 {font-size:28px;line-height:1.1;margin:6px 0}
+.phase-number {font:22px var(--font-mono);background:var(--pink);border:2px solid var(--ink);border-radius:50%;width:49px;height:49px;display:grid;place-items:center;flex-shrink:0}
+.voice-phase .phase-number {background:var(--green)}
+.phase-card fieldset {border:0;padding:0;margin:0;min-width:0}
+.phase-card label,.key-field>label {display:block;font-size:14px;font-weight:700;margin:16px 0 7px}
+.phase-card input:not([type=checkbox]),.phase-card select,.phase-card textarea,.key-field>input {display:block;width:100%;border:1.5px solid var(--ink);border-radius:7px;background:#fffef9;color:var(--ink);padding:11px 12px;font:14px var(--font-sans);min-width:0}
+.phase-card textarea {resize:vertical}
+.key-field {margin:18px 0}
+.key-field>small {display:block;font-size:11px;line-height:1.6;opacity:.75;margin-top:8px}
+.key-field .key-file {font-size:12px;font-weight:400;cursor:pointer}
+.key-file input[type=file] {font-size:11px;margin-top:8px;width:100%;border:0;padding:0;background:transparent}
+.stage-estimate {display:grid;gap:6px;background:#eee8f3;border:1px dashed #82738b;border-radius:8px;padding:14px;margin:20px 0;font-size:13px;line-height:1.6}
+.stage-estimate span {font-size:12px}
+.batch-actions {display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:16px 0}
+.batch-actions input[type=number] {width:65px}
+.batch-actions .ink-button {font-size:13px;padding:11px 14px}
+.phase-card .script-checkbox {display:flex;align-items:flex-start;gap:10px;font-weight:400}
+.phase-card .script-checkbox input {margin-top:4px;flex-shrink:0}
+.phase-card audio {width:100%;margin-top:20px}
+.phase-card summary {font-weight:700;cursor:pointer;line-height:1.6}
+.visual-plan>p {font-size:14px;line-height:1.7;margin:16px 0}
+.visual-plan fieldset {max-width:560px}
+.frame-gallery {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:24px}
+.frame-card {background:#f4efdf;border:1.5px solid var(--ink);border-radius:9px;overflow:hidden;padding:12px;min-width:0}
+.frame-card img {width:100%;object-fit:contain;background:#fffaf0;border-radius:4px;max-height:300px}
+.frame-card p {font-size:14px;line-height:1.6;margin:10px 0;overflow-wrap:anywhere}
+.frame-card .prompt-text {font:11px/1.7 var(--font-mono);white-space:pre-wrap;max-height:240px;overflow:auto}
+.frame-card summary {font-size:12px}
+.frame-pending {aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:var(--blue);border-radius:5px}
+.frame-pending span {font:32px var(--font-mono)}
+.frame-pending small {font-size:12px}
+.saved-text {margin:26px 0}
+.saved-text .script-scroll p {white-space:pre-wrap}
+.saved-outputs>div {display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:16px 0;border-bottom:1px dashed #aaa;font-size:13px}
+.saved-outputs>div span {flex:1;min-width:160px}
+.saved-outputs a {text-decoration:underline}
+.premiere {margin:24px 0 32px}
+.premiere video {width:100%;max-height:650px;background:#211e27;border-radius:10px}
+@media(max-width:850px) {.phase-layout{grid-template-columns:1fr}.phase-strip{grid-template-columns:repeat(2,1fr)}.frame-gallery{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px) {.phase-card{padding:18px}.phase-strip li{font-size:12px;padding:10px 7px;gap:4px}.frame-gallery{grid-template-columns:1fr}.phase-title h2{font-size:24px}}
+
 @theme  {
    --font-sans: "Bricolage Grotesque", sans-serif;
    --font-mono: "Space Mono", monospace;

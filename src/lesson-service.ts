@@ -20,7 +20,7 @@ export function validateLessonRequest(value: unknown): LessonRequest {
   if (!["material", "topic", "script"].includes(String(body.mode))) throw new RequestError("Choose a text upload, topic, or existing script.");
   if (typeof body.audience !== "string" || !body.audience.trim() || body.audience.length > 300) throw new RequestError("Choose an audience (1–300 characters).");
   if (typeof body.targetWords !== "number" || !Number.isInteger(body.targetWords) || body.targetWords < 50 || body.targetWords > 2000) throw new RequestError("Script length must be between 50 and 2,000 words.");
-  return { text: body.text.trim(), mode: body.mode as LessonRequest["mode"], audience: body.audience.trim(), targetWords: body.targetWords };
+  return { text: body.text.trim(), mode: body.mode as LessonRequest["mode"], audience: body.audience.trim(), targetWords: body.targetWords, ...(typeof body.apiKey === "string" ? { apiKey: body.apiKey } : {}) };
 }
 
 export function parseNarration(script: string, title = "Your original narration"): PipelineResult {

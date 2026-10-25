@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename, copyFile, open, unlink, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, open, unlink, stat } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import ffmpeg from '@ffmpeg-installer/ffmpeg';
+import { createTextCard } from './text-cards.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 export const DEFAULT_VOICE_MODEL = 'eleven_flash_v2_5';
@@ -21,7 +22,8 @@ export function validateLesson(value) {
     if (c.renderHint && !['image', 'text', 'skip'].includes(c.renderHint)) throw new Error(`Chunk ${i}: unsupported renderHint.`);
     end = c.endOffset;
     return { index: i, text: c.text, startOffset: c.startOffset, endOffset: c.endOffset,
-      renderHint: c.renderHint ?? 'image', visualFocus: typeof c.visualFocus === 'string' ? c.visualFocus : null };
+      renderHint: c.renderHint ?? 'image', visualFocus: typeof c.visualFocus === 'string' ? c.visualFocus : null,
+      displayText: typeof c.displayText === 'string' && c.displayText.trim() ? c.displayText.slice(0, 300) : c.text };
   });
   if (value.script.slice(end).trim()) throw new Error('Chunks omit narration at the end of the script.');
   return { title: typeof value.title === 'string' ? value.title.slice(0, 200) : 'Entertainify', script: value.script, chunks };
@@ -51,7 +53,7 @@ export function characterTimings(script, alignment) {
   return map;
 }
 
-export function createTimeline(lessonInput, alignment, duration, { fps = 30, cutMode = 'chunk', mapping = {}, fallbackText = false } = {}) {
+export function createTimeline(lessonInput, alignment, duration, { fps = 30, cutMode = 'chunk', mapping = {}, fallbackText = false, requireImageMajority = false } = {}) {
   const lesson = validateLesson(lessonInput);
   if (![24, 30, 60].includes(fps) || !['chunk', 'focus'].includes(cutMode) || !Number.isFinite(duration) || duration <= 0)
     throw new Error('Invalid video timing settings.');
@@ -70,11 +72,11 @@ export function createTimeline(lessonInput, alignment, duration, { fps = 30, cut
     previousTime = at;
     const imagePath = mapping[c.index];
     if (c.renderHint === 'image' && !imagePath && !fallbackText) throw new Error(`Chunk ${c.index} has no mapped image. Add one or explicitly enable text fallback.`);
-    events.push({ chunkIndex: c.index, text: c.text, sourceOffset: offset, alignedStart: at,
+    events.push({ chunkIndex: c.index, text: c.text, displayText: c.displayText, sourceOffset: offset, alignedStart: at,
       startFrame: Math.round(at * fps), kind: c.renderHint === 'text' || !imagePath ? 'text' : 'image', imagePath: imagePath ?? null });
   }
   const totalFrames = Math.ceil(duration * fps);
-  if (!events.length || events[0].startFrame > 0) events.unshift({ chunkIndex: null, text: lesson.title, sourceOffset: null, alignedStart: 0, startFrame: 0, kind: 'text', imagePath: null });
+  if (!events.length || events[0].startFrame > 0) events.unshift({ chunkIndex: null, text: lesson.title, displayText: lesson.title, sourceOffset: null, alignedStart: 0, startFrame: 0, kind: 'text', imagePath: null });
   const scenes = [];
   for (const event of events) {
     if (event.startFrame >= totalFrames) { warnings.push(`Chunk ${event.chunkIndex} starts beyond the final video frame.`); continue; }
@@ -84,7 +86,9 @@ export function createTimeline(lessonInput, alignment, duration, { fps = 30, cut
     } else scenes.push(event);
   }
   scenes.forEach((s, i) => { s.endFrame = scenes[i + 1]?.startFrame ?? totalFrames; s.startSeconds = s.startFrame / fps; s.durationSeconds = (s.endFrame - s.startFrame) / fps; });
-  return { fps, duration, totalFrames, cutMode, warnings, scenes };
+  const imageTimeShare = scenes.reduce((sum, scene) => sum + (scene.kind === 'image' ? scene.endFrame - scene.startFrame : 0), 0) / totalFrames;
+  if (requireImageMajority && imageTimeShare <= 0.5) throw new Error('The speech timestamps leave images on screen for half the video or less. Replan visuals with Groq to add illustrations; your saved narration can be reused.');
+  return { fps, duration, totalFrames, imageTimeShare, cutMode, warnings, scenes };
 }
 
 async function atomicJson(file, value) {
@@ -148,24 +152,18 @@ export function wavDuration(bytes) {
   if (!rate || !data) throw new Error('WAV has no usable audio samples.');
   return data / rate;
 }
-function wrap(text, limit) {
-  const words = text.replace(/\s+/gu, ' ').trim().split(' '), lines = []; let line = '';
-  for (const word of words) { if (line && `${line} ${word}`.length > limit) { lines.push(line); line = word; } else line += `${line ? ' ' : ''}${word}`; }
-  if (line) lines.push(line); return lines.join('\n');
-}
-export async function renderVideo({ lesson, alignment, audioPath, mapping = {}, fallbackText = false, cutMode = 'chunk', width = 1280, height = 720, fps = 30, outputDir, signal, onProgress = () => {} }) {
+export async function renderVideo({ lesson, alignment, audioPath, mapping = {}, fallbackText = false, requireImageMajority = false, cutMode = 'chunk', artStyle = '', textStyle = 'auto', width = 1280, height = 720, fps = 30, outputDir, signal, onProgress = () => {} }) {
   validateLesson(lesson); characterTimings(lesson.script, alignment);
   if (![[1280,720],[720,1280],[1024,1024],[640,360]].some(([w,h])=>width===w&&height===h)) throw new Error('Unsupported render dimensions.');
   await mkdir(outputDir, { recursive: true });
   onProgress('Decoding narration');
   await runFfmpeg(['-i', audioPath, '-vn', '-ac', '1', '-ar', '48000', '-c:a', 'pcm_s16le', 'audio.wav'], { cwd: outputDir, signal });
   const duration = wavDuration(await readFile(path.join(outputDir, 'audio.wav')));
-  const timeline = createTimeline(lesson, alignment, duration, { fps, mapping, fallbackText, cutMode });
-  await copyFile(path.join(process.env.WINDIR ?? 'C:\\Windows', 'Fonts', 'segoeui.ttf'), path.join(outputDir, 'font.ttf'));
+  const timeline = createTimeline(lesson, alignment, duration, { fps, mapping, fallbackText, cutMode, requireImageMajority });
   const prepared = new Map();
   for (let i = 0; i < timeline.scenes.length; i++) {
     signal?.throwIfAborted(); const scene = timeline.scenes[i];
-    const identity = scene.kind === 'image' ? `image:${scene.imagePath}` : `text:${scene.text}`;
+    const identity = scene.kind === 'image' ? `image:${scene.imagePath}` : `text:${scene.displayText}`;
     if (!prepared.has(identity)) {
       onProgress(`Preparing frame ${i + 1} of ${timeline.scenes.length}`);
       const name = `frame-${String(prepared.size).padStart(4,'0')}.png`;
@@ -173,10 +171,7 @@ export async function renderVideo({ lesson, alignment, audioPath, mapping = {}, 
         await stat(scene.imagePath);
         await runFfmpeg(['-i', scene.imagePath, '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=0xfffdf6,setsar=1`, '-frames:v', '1', name], { cwd: outputDir, signal });
       } else {
-        const textFile = `text-${prepared.size}.txt`, fontSize = Math.round(width * .045);
-        await writeFile(path.join(outputDir, textFile), wrap(scene.text, Math.max(16, Math.floor(width / (fontSize * .55)) - 6)));
-        await runFfmpeg(['-f', 'lavfi', '-i', `color=c=0xfffdf6:s=${width}x${height}:d=1`, '-vf',
-          `drawtext=fontfile=font.ttf:textfile=${textFile}:expansion=none:fontcolor=0x29263d:fontsize=${fontSize}:line_spacing=12:x=(w-text_w)/2:y=(h-text_h)/2`, '-frames:v', '1', name], { cwd: outputDir, signal });
+        await writeFile(path.join(outputDir, name), createTextCard({ text: scene.displayText, width, height, artStyle, textStyle }));
       }
       prepared.set(identity, name);
     }

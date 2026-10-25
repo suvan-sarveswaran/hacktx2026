@@ -4,24 +4,44 @@ Turn educational text into an entertaining, factual YouTube narration script and
 
 The writing prompt asks for approachable explanations, dry humor, and useful visual analogies while keeping the teaching content grounded in the supplied material. The narration uses an original, conversational voice.
 
-## Images, narration and MP4 Studio
+## One app, from notes to video
 
-The image/voice/video application lives in [`studio/`](studio/README.md), with its own local browser interface and SQLite storage. It accepts the unchanged lesson JSON produced by this app, generates Pollinations images, synthesizes ElevenLabs narration, and stitches an MP4 locally.
+Run `npm install`, then `npm run dev`, and open **http://127.0.0.1:3000**. On PowerShell, use `npm.cmd install` and `npm.cmd run dev` if needed. Node 24 is recommended; pnpm is optional. You can also double-click **Start Image and Video Studio.cmd**: it starts the app directly with Node when dependencies are installed, or installs missing dependencies with npm first.
+
+With dependencies already installed, you can start directly without a package manager:
 
 ```sh
-npm --prefix studio install
-npm run studio
+node --env-file-if-exists=.env --import tsx src/server.ts --dev
 ```
 
-Open **http://127.0.0.1:4317/video**. On Windows, you can also double-click **Start Image and Video Studio.cmd**. Studio requires Node.js **24+**. Run its checks with `npm run test:studio`; tests use mocks and do not spend AI credits.
+1. Upload PDF/text or paste material. Enter or upload a **Groq API key** to write the script. Existing narration can skip writing.
+2. Choose doodles, editorial vector, colored pencil, cinematic, or custom art direction; choose landscape, square, or portrait. Enter a **Pollinations API key**, then generate one, a few, or all missing images. Scene counts, saved previews, and editable prompts are shown before proceeding.
+3. Enter an **ElevenLabs API key**. Select a voice (or load available voices), Flash v2.5 or Multilingual v2, and an output format. Generate audio only or create the MP4. Optional text fallback supports partial test videos.
+4. Watch the finished video in the same screen. **My lessons** restores the source, script, settings, images, narration, and video versions after browser/server restarts.
 
-For now, download a lesson JSON from the dashboard at port 3000 and upload it into Studio at port 4317. The automatic renderer adapter is not connected yet. See [Studio integration and upload preparation](docs/studio-integration.md) for the boundary and the branch workflow. Keep provider keys and generated assets local; `studio/data/`, dependencies, caches and `.env` files are ignored by Git.
+Keys are used only for their requested operation and are never written to project files or browser storage. No second UI or manual JSON handoff is required. The old screens are preserved in [`studio/archive/public/`](studio/archive/README.md); `pnpm studio` explicitly opens the archived app and its existing `studio/data/` projects.
+
+New projects live in **`output/lessons/`**, configurable with `LESSON_DATA_DIR`. Keep that folder to retain your library. Each project includes `source.txt`, `script.txt`, `lesson.json`, `project.json`, image versions, cached audio, and MP4 versions. All generated media stays out of Git. See [integration details](docs/studio-integration.md).
+
+## Purposeful visuals and text cards
+
+New main-app lessons start with one structured Groq response for narration and visual direction. Illustrations are the default, targeting 80–90% of narrated time. Objects, mechanisms, diagrams, comparisons and relevant visual analogies can represent abstract ideas too. Centered text is reserved for beats with no useful depiction. Scenes aim for 6–12 spoken words (roughly 2.4–4.8 seconds), with exact cuts determined by ElevenLabs timestamps. Long image scenes stay illustrated across their balanced cuts, each with a narration-specific prompt. Repeated prompts receive a specific shot focus rather than becoming text. The selected style and aspect ratio apply consistently, and each illustration has a distinct stable seed. Captions remain separate from the spoken script.
+
+For an existing lesson, open its visual-plan panel, enter Groq and choose **Replan visuals**, then generate the new illustrations. Replanning keeps the exact narration, prior videos and voice cache. It uses GPT-OSS 20B in batches of at most 24 beats, waits at least 61 seconds between requests, and checkpoints completed batches. Plans below 60% estimated image time get one corrective attempt per batch; new stories also enter this repair flow when necessary, saving the original script first. Quota errors stop for explicit continuation; no provider fallback or automatic paid upgrade occurs. Interrupted batches resume; explicitly replanning a completed plan starts fresh. The new policy uses a separate cache version, so older text-heavy plans are not reused. Free-tier limits still apply; start with a quick bite and a short source.
+
+The dashboard shows estimated image time. Final MP4s require more than 50% image coverage both before voice generation (estimated narration duration) and at rendering (actual frame timing, including pauses). An explicitly selected **Test preview** may use text fallback and bypass that minimum; saved versions identify these previews.
+
+FLUX.1 Schnell stays the budget default. You can test FLUX.2 Klein 4B, Z-Image Turbo or GPT Image 1 Mini using **Generate 1** before committing to a batch; model prices and availability differ. Pollinations' direct image endpoint accepts individual prompts and has no conversation-history field. The old repeated-character instructions, tiny chunks and shared seed were the repetition risks. The new prompts explicitly describe each scene independently and avoid a generic human presenter. Model outputs are still nondeterministic in quality.
+
+Text cards render locally with matching doodle, editorial, pencil or cinematic type/palette. **Match the art direction** recognizes those style families; choose a card style explicitly for custom art directions. No image request is made for text cards.
+
+References: [Pollinations image API](https://github.com/pollinations/pollinations/blob/main/gen.pollinations.ai/src/docs/image-generation.md), [current image models](https://gen.pollinations.ai/image/models), [Groq rate limits](https://console.groq.com/docs/rate-limits).
 
 ## Interactive dashboard
 
 Entertainify now includes a React + Tailwind dashboard with custom SVG doodles and pixel sprites, an interactive comic landing page, expanding full-screen panels, a drawing pad, and a lesson studio. Fonts are bundled locally; no external image or font service is needed.
 
-After installing the dependencies and configuring `.env` below, start the site:
+After installing dependencies, start the site (dashboard keys are entered at each step; `.env` is optional):
 
 ```sh
 npm run dev
@@ -29,12 +49,12 @@ npm run dev
 
 Open **http://127.0.0.1:3000**. On PowerShell, use `npm.cmd` if needed. Both the API and Vite share this address. The existing CLI commands still work unchanged.
 
-- **Upload material:** choose or drop a `.pdf`, UTF-8 `.txt` / `.md` file, or paste course material. PDFs become editable source text first; AI then writes the narration and the existing chunker creates the visual plan.
-- **Existing narration:** check “I already have a narration script” to keep the original words and run the local chunker without any AI request.
+- **Upload material:** choose or drop a `.pdf`, UTF-8 `.txt` / `.md` file, or paste course material. PDFs become editable source text first; Groq writes narration, per-scene image prompts, and text-card captions together.
+- **Existing narration:** check “I already have a narration script” to keep the original words as readable text cards with no AI request. Use **Replan visuals** to add Groq-directed illustrations later.
 - **From scratch:** describe a topic and choose an audience and approximate runtime. A topic-specific prompt teaches from general knowledge rather than treating the request as source evidence.
 - **Sample lesson:** a clearly marked, prewritten mitochondria lesson demonstrates real scene splitting without an API key or renderer.
-- **Results:** read the narration, explore or play a silent storyboard, download the exact `PipelineResult` JSON, and watch the finished video when the renderer is connected. Placeholder doodles in a storyboard are not generated illustrations.
-- **My lessons:** recent titles are saved in this browser. Source drafts and the current job ID stay in browser session storage. Server jobs are held in memory for up to one hour (maximum 40), and disappear on restart or capacity eviction. Download JSON to retain it.
+- **Results:** generate illustrations and aligned narration, watch and download the completed MP4, inspect scene prompts, and download source/script text or lesson JSON. The demo remains an explicitly labeled silent storyboard.
+- **My lessons:** the library comes from durable server project files. It survives browser and server restarts. Draft text and the current job ID also stay in browser session storage; API keys do not.
 
 To build and run the production app locally:
 
@@ -44,11 +64,11 @@ npm run build:web
 npm run start:web
 ```
 
-The frontend is in `web/`; the HTTP server and integration are in `src/server.ts`, `src/lesson-service.ts`, and `src/video-renderer.ts`. Type-check both with `npm run typecheck`, and run the suite with `npm test`. Node **22.18+ or 24+** is recommended for the dashboard toolchain.
+The frontend is in `web/`; the HTTP server and integration are in `src/server.ts`, `src/production-service.ts`, and the shared generation modules in `studio/`. Type-check both with `npm run typecheck`, and run the suite with `npm test`. Node **22.18+ or 24+** is recommended for the dashboard toolchain.
 
-The video stage is intentionally a separate adapter for your partner's pipeline. Set `VIDEO_RENDERER_URL` in `.env` when that service is ready, then restart the server. Without it, the app honestly stops at “script & scene plan ready.” See **[the video pipeline merge guide](docs/video-pipeline.md)** for the exact endpoints, status shape, and in-process integration option. No reformatting of existing lesson JSON is needed.
+The main app imports the shared image, voice, and FFmpeg functions directly. `VIDEO_RENDERER_URL` is no longer used by the main UI. The original renderer adapter remains available as a library integration contract.
 
-The local server binds to `127.0.0.1` by default. It applies a 400 KB JSON request-body limit, 25 MB PDF limit, 80,000-character source cap, three concurrent lesson jobs, two concurrent PDF imports, and ten creation requests per minute per socket IP. These are demo safeguards, not a public authentication system. Before hosting publicly, add user authentication, durable job storage, and deployment-aware rate limits. Provider keys and the optional renderer token remain on the server.
+The local server binds to `127.0.0.1` by default. It applies a 400 KB JSON request-body limit, 25 MB PDF limit, 80,000-character source cap, three concurrent lesson jobs, two concurrent PDF imports, and ten creation requests per minute per socket IP. These are demo safeguards, not a public authentication system. Before hosting publicly, add user authentication, per-user storage isolation, and deployment-aware rate limits. This is a local single-user library; other clients with access to the server can read its projects. Keys stay in memory only while their operation is running.
 
 ### Textbook and slideshow PDFs
 
@@ -177,7 +197,7 @@ The script generator requests a structured title and narration. Groq provides an
 
 ## Free usage and a public website
 
-The CLI, library, and dashboard call `entertainify` **on the server** and store the provider key in server environment variables. Never put the key in browser code or return it to visitors.
+The CLI and library can read provider keys from environment variables. The dashboard sends each user-entered key to the local backend for one stage; the backend calls the provider and never saves or returns the key. Never embed credentials in the frontend bundle.
 
 All visitors using your Groq key share the organization's free quota. Check the current [Groq rate limits](https://console.groq.com/docs/rate-limits) and your account's limits before deployment. The local dashboard includes input caps, concurrency limits, and basic IP request limits; public deployment still needs per-user controls. Free-tier access can support a hackathon demo, but does not guarantee unlimited public traffic. If a large lesson exceeds the allowance, shorten the source or request a shorter script with `--words`.
 
@@ -204,7 +224,7 @@ Each chunk includes three fields to help choose a visual:
 
 For example, `"use light to help"` is one chunk with `renderHint: "image"` and `visualFocus: "light"`. Standalone fragments such as `"use"`, `"help"`, or `"idea"` receive `renderHint: "text"` and `visualFocus: null`.
 
-Your future video renderer can use these hints to choose an image or an on-screen word:
+The video renderer uses these hints to choose an image or an on-screen word:
 
 ```ts
 const visualPlan = lesson.chunks.map((chunk) => {
@@ -247,7 +267,7 @@ Chunks are typically 1–5 words. The default safety limit is **8 words per chun
 
 Generic verbs such as “use” and “help” attach to adjacent content when possible, within the same sentence and the word limit. This avoids unnecessary fragments such as `"use"`, `"light to"`, and `"help"`, combining them into `"use light to help"`. If a fragment still has no clear visual focus, its text hint lets the video display the words instead.
 
-PDF/slideshow extraction is included in the dashboard. Image prompt generation, image generation, voice synthesis, and video assembly remain separate stages connected through the video renderer adapter; the partner's image/audio/video pipeline and its lesson JSON contract are unchanged.
+PDF/slideshow extraction and all generation stages are integrated in the dashboard. The original script and chunk offsets pass unchanged to voice synthesis and video timing. Prompts combine the lesson opening, nearby narration, visual focus, scene-specific composition, art direction, and aspect ratio. Text chunks become local text cards.
 
 ## Checks
 

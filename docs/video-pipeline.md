@@ -1,3 +1,5 @@
+> **Legacy adapter contract:** The main app now uses `ProductionService` and imports the shared media modules directly. This document is retained for library integrations. See [current integration](studio-integration.md).
+
 # Connecting the video pipeline
 
 The React app calls the Node server. The Node server calls the existing `entertainify()` function and passes its **unchanged `PipelineResult`** to the video renderer. The browser never receives API keys or the renderer token.

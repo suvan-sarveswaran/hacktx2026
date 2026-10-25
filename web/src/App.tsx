@@ -16,7 +16,7 @@ const facts = [
   ["Confused? Good starting point.", "Every “aha!” begins with a small “huh?”"],
   ["A textbook walks into a bar…", "Nobody notices. We’re working on its delivery."],
 ];
-const finished = (job: LessonJob) => ["complete", "script-ready", "failed"].includes(job.status);
+const finished = (job: LessonJob) => !["writing", "planning", "images", "voice", "rendering"].includes(job.status);
 
 function readRecent(): RecentLesson[] {
   try { const data: unknown = JSON.parse(localStorage.getItem("entertainify-recent") ?? "[]"); return Array.isArray(data) ? data.filter((x) => x && typeof x.id === "string" && typeof x.title === "string" && typeof x.createdAt === "string").slice(0, 8) : []; } catch { return []; }
@@ -42,7 +42,7 @@ export default function App() {
   const requestPending = useRef(false);
   const noMotion = quiet || Boolean(reduceMotion);
 
-  useEffect(() => { api.health().then(setHealth).catch(() => setHealth(null)); }, []);
+  useEffect(() => { api.health().then(setHealth).catch(() => setHealth(null)); api.list().then(setRecent).catch(() => {}); }, []);
   useEffect(() => {
     try {
       const id = sessionStorage.getItem("entertainify-current");
@@ -81,7 +81,7 @@ export default function App() {
     if (!job?.result) return;
     setRecent((previous) => {
       const entry: RecentLesson = { id: job.id, title: job.result!.title, createdAt: job.createdAt, demo: job.demo, status: job.status };
-      const next = [entry, ...previous.filter((r) => r.id !== job.id)].slice(0, 8);
+      const next = [entry, ...previous.filter((r) => r.id !== job.id)];
       try { localStorage.setItem("entertainify-recent", JSON.stringify(next)); } catch { /* Storage is optional. */ }
       return next;
     });
@@ -120,6 +120,7 @@ export default function App() {
   function open(panel: Panel, element?: HTMLElement) {
     if (!active) openerRef.current = element ?? document.activeElement as HTMLElement | null;
     if (element) { const box = element.getBoundingClientRect(); setOrigin({ x: (box.x + box.width / 2) / window.innerWidth * 100, y: (box.y + box.height / 2) / window.innerHeight * 100 }); }
+    if (panel === "library") void api.list().then(setRecent).catch(() => {});
     setActive(panel); chirp();
   }
 
@@ -140,6 +141,11 @@ export default function App() {
     if (!job || finished(job)) void generate();
   }
   function reset() { setJob(null); setError(""); try { sessionStorage.removeItem("entertainify-current"); } catch { /* Optional persistence. */ } }
+  async function refreshCurrent() {
+    if (!job) return;
+    try { setJob(await api.lesson(job.id)); setError(""); setPollVersion(v => v + 1); }
+    catch (error) { setError(error instanceof Error ? error.message : "Could not refresh this lesson."); }
+  }
   async function restore(id: string) {
     if (requestPending.current) return;
     if (job && !finished(job) && job.id !== id) { open("upload"); return; }
@@ -193,9 +199,9 @@ export default function App() {
       {active && <motion.div ref={dialog} layoutId={`panel-${active}`} key={active} role="dialog" aria-modal="true" aria-label={active === "upload" ? "Upload a lesson" : active === "scratch" ? "Create a lesson from scratch" : active === "library" ? "My lessons" : "The mystery room"} className={`studio-overlay ${active === "mystery" ? "dark-studio" : ""}`} style={{ "--studio-color": panelColors[active] } as CSSProperties} transition={{ type: "spring", stiffness: 140, damping: 23 }}>
         <div className="studio-topbar"><button ref={closeRef} className="back-button" onClick={close}><ChevronLeft size={17}/>Back to the comic</button><span className="studio-wordmark rainbow-wordmark">entertainify.</span><button className="close-button" onClick={close} aria-label="Close panel"><X size={19}/><span>ESC</span></button></div>
         <motion.div initial={{ opacity: 0, y: noMotion ? 0 : 25 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ delay: noMotion ? 0 : .22, duration: .35 }}>
-          {(active === "upload" || active === "scratch") && <Studio key={active} kind={active} job={job} busy={busy} error={error} health={health} onGenerate={(request) => void generate(request)} onDemo={() => void generate()} onReset={reset} onRetryConnection={() => setPollVersion((v) => v + 1)}/>}
+          {(active === "upload" || active === "scratch") && <Studio key={active} kind={active} job={job} busy={busy} error={error} health={health} onGenerate={(request) => void generate(request)} onDemo={() => void generate()} onReset={reset} onRetryConnection={() => void refreshCurrent()} onUpdate={setJob}/>}
           {active === "mystery" && <Mystery/>}
-          {active === "library" && <div className="studio-content"><div className="studio-heading"><div><span className="eyebrow">YOUR LITTLE COLLECTION OF AHA’S</span><h1>The good<br/><span>stuff stays here.</span></h1><p>Recent lessons from this browser. Download the JSON to keep a copy.</p></div><Book className="studio-art"/></div>{recent.length ? <div className="lesson-library">{recent.map((lesson) => <button key={lesson.id} onClick={() => void restore(lesson.id)} className="saved-lesson"><span className="saved-icon"><Film size={25}/></span><span><strong>{lesson.title}</strong><small>{lesson.demo ? "Sample storyboard" : lesson.status === "complete" ? "Video ready" : "Script & scene plan"} · {new Date(lesson.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</small></span><ArrowUpRight size={20}/></button>)}<p className="input-note mt-4">Lessons are held in this server’s memory for up to an hour and may expire sooner when the studio is busy or restarted. This list stores titles, not your source text.</p></div> : <div className="empty-library"><Pixel/><h2>A blank page. So much potential.</h2><p>Your first “aha!” is one good question away.</p><button className="ink-button primary" onClick={() => open("scratch")}>Make your first lesson <ArrowRight size={18}/></button></div>}</div>}
+          {active === "library" && <div className="studio-content"><div className="studio-heading"><div><span className="eyebrow">YOUR LITTLE COLLECTION OF AHA’S</span><h1>The good<br/><span>stuff stays here.</span></h1><p>Your videos, source text, and scripts, saved on this computer. Pick up right where you left off.</p></div><Book className="studio-art"/></div>{recent.length ? <div className="lesson-library">{recent.map((lesson) => <button key={lesson.id} onClick={() => void restore(lesson.id)} className="saved-lesson"><span className="saved-icon"><Film size={25}/></span><span><strong>{lesson.title}</strong><small>{lesson.demo ? "Sample storyboard" : lesson.status === "complete" ? "Video ready" : "Script & scene plan"} · {new Date(lesson.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</small></span><ArrowUpRight size={20}/></button>)}<p className="input-note mt-4">Projects survive browser and server restarts. Download the video, source, or script from any lesson.</p></div> : <div className="empty-library"><Pixel/><h2>A blank page. So much potential.</h2><p>Your first “aha!” is one good question away.</p><button className="ink-button primary" onClick={() => open("scratch")}>Make your first lesson <ArrowRight size={18}/></button></div>}</div>}
         </motion.div>
       </motion.div>}
     </AnimatePresence>

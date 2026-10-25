@@ -14,6 +14,18 @@ function fixtureLesson(){const parts=['Leaf.','First,','Light.','Water.','Next,'
 async function listen(server){await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));return `http://127.0.0.1:${server.address().port}`;}
 async function json(base,url,data){const response=await fetch(base+url,data===undefined?{}:{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify(data)});return {status:response.status,body:await response.json()};}
 async function until(read,check){for(let i=0;i<300;i++){const value=await read();if(check(value))return value;await delay(15);}throw new Error('Test timed out');}
+
+test('independent scene seeds reach the provider and cached images survive batch reordering',async t=>{
+ const outDir=await mkdtemp(path.join(tmpdir(),'scene-seeds-'));const seen=[];
+ const provider=http.createServer((req,res)=>{const u=new URL(req.url,'http://localhost');seen.push(u.searchParams.get('seed'));res.writeHead(200,{'Content-Type':'image/png'});res.end(png);});
+ const baseUrl=await listen(provider);
+ t.after(async()=>{provider.closeAllConnections();await new Promise(resolve=>provider.close(resolve));await rm(outDir,{recursive:true,force:true});});
+ const options={apiKey:'test',model:'test',outDir,baseUrl,minIntervalMs:1};
+ const result=await generateImages(['A leaf','A leaf'],{...options,seeds:[17,23]});
+ assert.deepEqual(seen.sort(),['17','23']);assert.notEqual(result.scenes[0].file,result.scenes[1].file);
+ await generateImages(['A leaf'],{...options,seeds:[23]});assert.equal(seen.length,2);
+ await assert.rejects(generateImages(['A leaf'],{...options,seeds:[]}),/one stable seed/);
+});
 test('prompt aliases preserve upstream prompts; fallback uses focus, context and shared style',()=>{
  const lesson=normalizeProjectLesson(fixtureLesson());assert.equal(lesson.chunks[0].imagePrompt,'A little leaf holding a spoon.');
  assert.match(styledImagePrompt(lesson,lesson.chunks[0],'Purple pencil'),/spoon.*\n\nART DIRECTION/s);

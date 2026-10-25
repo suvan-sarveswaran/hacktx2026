@@ -1,56 +1,46 @@
-# Studio integration and upload preparation
+# Integrated lesson production
 
-## Current layout
+The main app at port 3000 now owns the entire text/PDF → Groq script → Pollinations images → ElevenLabs narration → MP4 workflow. No JSON upload into a second UI is needed.
 
-- `src/`, `web/`, and their existing tests: the upstream text/script/chunk app, unchanged.
-- `studio/`: the existing Pollinations image generation, ElevenLabs narration and local FFmpeg application. It has an independent package/lockfile and starts on port 4317.
-- `studio/data/`: private local SQLite database, images, audio cache and videos. Moved with Studio on this computer, but excluded from Git.
-- `studio/node_modules/` and `.npm-cache/`: local dependencies/caches, excluded from Git.
+## Code boundaries
 
-## Run locally
+- `src/production-service.ts`: durable project lifecycle, per-operation credentials, stage validation, retries, cancellation, image versions and output history.
+- `src/production-settings.ts`: shared art presets, image models, text styles, aspect ratios, voice defaults.
+- `src/visual-plan.ts`, `src/visual-planner.ts`: illustration-first plans (80–90% target), duration-based coverage checks, exact-offset validation and resumable free-tier replanning. Plans below 60% estimated image time receive a bounded corrective pass. Cache version 3 separates these from older text-heavy plans.
+- Final MP4s require more than half their duration to show images, checked before voice generation and again using actual rendered frame timing. Explicit text-fallback previews are exempt and labeled in saved versions.
+- `studio/text-cards.mjs`: measured, centered typography with four matching art themes.
+- `src/server.ts`: lesson/stage routes, PDF imports, downloads, local media streaming with byte ranges.
+- `web/src/Production.tsx`: phased production UI, image gallery/prompt edits, voice selection, audio/video playback and saved text.
+- `studio/images.mjs`, `studio/lesson-images.mjs`, `studio/video.mjs`: shared provider clients, prompts, caching, exact speech alignment and FFmpeg assembly.
+- `studio/archive/public/`: preserved standalone UI. `pnpm studio` opens it explicitly on port 4317. Its SQLite data remains untouched in `studio/data/`; new integrated projects use a separate folder.
 
-Use Node.js 24 or newer. From the repository root:
+## Main app API
 
-```sh
-npm --prefix studio install
-npm run studio
-```
+- `POST /api/lessons`: `{text, mode, audience, targetWords, apiKey}`. Material/topic modes require a Groq key. Script mode uses exact supplied narration with no writing request.
+- `GET /api/lessons`: durable library summaries.
+- `GET /api/lessons/:id`: current public state, result, frames, source text, settings and outputs. No credentials.
+- `POST /api/lessons/:id/script`: retry failed writing with `{apiKey}`.
+- `POST /api/lessons/:id/plan`: `{apiKey}` replans exact existing narration with Groq; commits only a complete valid plan and clears scene mappings, preserving prior output files. Completed batches/cooldowns live in `plan-cache/` without credentials.
+- `POST /api/lessons/:id/settings`: save `{settings, prompts}` without provider calls. Prompts map image chunk indexes to custom scene ideas.
+- `POST /api/lessons/:id/images`: `{apiKey, settings?, prompts?, count?}`. Omit count for all missing images. A completed image is persisted immediately and reused on retry.
+- `POST /api/lessons/:id/video`: `{apiKey, settings?, audioOnly?}`. Requires all images unless `settings.fallbackText` explicitly allows a partial test video. Uses the unchanged narration and actual character timestamps. Voice cache keys include script, voice and model.
+- `POST /api/lessons/:id/stop`: stop visual-planning/image/voice/video work. Completed media remains available; a new key is needed to continue.
+- `POST /api/voices`: `{apiKey}` lists ElevenLabs voices without generating audio.
+- `GET /api/lessons/:id/json`: original `PipelineResult` contract.
+- `GET /api/lessons/:id/export`: result plus image prompts/mapping, art settings and saved output references.
+- `GET /api/lessons/:id/source` and `/script`: text downloads.
+- `GET /api/lessons/:id/assets/...`: validated local image/audio/video paths; media supports HEAD and Range requests.
 
-On the machine where Studio was moved, its dependencies are already present. Windows users can double-click `Start Image and Video Studio.cmd` instead. Enter Pollinations and ElevenLabs keys in the local Studio interface, or use `studio/.env` based on `studio/.env.example`. The root app and Studio load their own `.env` files; do not put secrets into tracked examples.
+Image and video aspects independently support landscape (1280 × 720), square (1024 × 1024), and portrait (720 × 1280). Changing the image ratio in the UI initially matches the video ratio; it can then be overridden. Art presets are doodle, flat editorial, colored pencil, cinematic and custom. Both original ElevenLabs models are supported. Keys may be pasted or loaded from a single-line text file; they are never persisted.
 
-Run the teammate's dashboard separately following the root README. The two apps use different ports: dashboard 3000, Studio 4317. Download the dashboard's lesson JSON and upload it once into Studio. Choose style and image aspect ratio, generate one/few/all images, then generate audio or MP4. Existing saved assets remain available in Studio.
+## Persistence and recovery
 
-```sh
-npm run test:studio
-```
+The default store is `output/lessons/`, overridden with `LESSON_DATA_DIR`. Each UUID folder contains `project.json` (atomically replaced), `source.txt`, `script.txt`, `lesson.json`, `frames/`, `image-cache/`, `voice-cache/`, and `videos/` with immutable output versions. Preserve this folder to preserve the library. Serve one app process per data directory. Interrupted stages are marked for explicit continuation on startup. There is no automatic paid generation after restart.
 
-Studio tests use local mock providers and synthetic media. They do not spend API credits.
+The default image model is `black-forest-labs/flux.1-schnell`. Counts distinguish missing images, saved images and locally rendered text cards. Voice estimates are approximate and plan-dependent. Image prompts preserve narration meaning, vary composition, and apply a shared palette and drawing style and aspect-specific framing; generated identity consistency remains best effort. The voice stage supports scripts up to 10,000 characters, matching the original renderer validation. The bundled FFmpeg dependency is installed from the root package. Text cards use Canvas with system font fallbacks; they no longer require copying a Windows font file into the output. `displayText` carries the short caption while `text` and offsets remain exact narration. Image cache identity includes model, dimensions, prompt and per-scene seed.
 
-## Automatic integration remains separate work
+The default server binds to localhost and has no multi-user authentication. Do not expose this shared local library as a public service without authentication and isolated per-user data. Browser keys are sent only to this backend and then to their intended provider. Provider error bodies are not forwarded.
 
-The root app's `src/video-renderer.ts` expects `POST /jobs` with a bare `PipelineResult`, followed by `GET /jobs/:id`, as described in `docs/video-pipeline.md`.
+## Verification
 
-Studio currently exposes `POST /api/projects` with `{ lesson }`, explicit image generation through `/api/projects/:id/images`, and audio/video jobs through `/api/video/jobs`. These are not the same service contract. Setting `VIDEO_RENDERER_URL` to Studio alone will not connect the apps.
-
-An adapter must preserve the lesson script and offsets, create/reuse a Studio project, queue missing images, wait for those images, create a voice/video job, and translate Studio statuses into the dashboard's task contract. It must return quickly, persist the task mapping, serve a playable media URL, and avoid automatically resubmitting paid jobs. Decide when the user approves image and narration costs before making that workflow automatic.
-
-## Prepared branch and upload
-
-The local branch is `feature/image-voice-studio`, created from the cloned `main`. Studio source, its tests and sanitized configuration examples are intended for Git; saved output, real keys and installed dependencies are not.
-
-Before committing, inspect the staged changes:
-
-```sh
-git status --short
-git diff --cached --stat
-git diff --cached
-```
-
-After review, commit and push the branch:
-
-```sh
-git commit -m "Add image, narration and MP4 Studio"
-git push -u origin feature/image-voice-studio
-```
-
-Then open a pull request into `main`. Push requires write access to the friend's repository. If access is denied, request collaborator access or push this branch to your own fork. No commit, push or pull request is performed as part of this preparation.
+Run `pnpm typecheck`, `pnpm test`, `pnpm test:studio`, `pnpm build`, and `pnpm build:web`. Tests use mocked providers and synthetic media, including real FFmpeg encoding and timing checks; they do not spend API credits. A paid provider run still requires the user's keys in the main UI.

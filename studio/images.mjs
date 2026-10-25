@@ -40,7 +40,7 @@ export async function generateImages(prompts, options = {}) {
     apiKey = process.env.POLLINATIONS_API_KEY,
     model = process.env.POLLINATIONS_MODEL,
     outDir = 'generated', concurrency = 4, width = 1024, height = 1024,
-    seed = 42, maxRetries = 4, timeoutMs = 120000,
+    seed = 42, seeds, maxRetries = 4, timeoutMs = 120000,
     maxJobWaitMs = 1800000, pollMs = 5000, signal, onProgress = () => {},
     // Override only for local tests or a trusted compatible gateway.
     baseUrl = 'https://gen.pollinations.ai', retryBaseMs = 1000, minIntervalMs = 1100,
@@ -50,6 +50,10 @@ export async function generateImages(prompts, options = {}) {
   integer(concurrency, 'concurrency', 1, 64);
   integer(width, 'width', 64, 4096); integer(height, 'height', 64, 4096);
   integer(seed, 'seed', 0, 2147483647); integer(maxRetries, 'maxRetries', 0, 20);
+  if (seeds !== undefined) {
+    if (!Array.isArray(seeds) || seeds.length !== prompts.length) throw new Error('Supply one stable seed per image prompt.');
+    seeds.forEach(value => integer(value, 'scene seed', 0, 2147483647));
+  }
   for (const [name, value] of Object.entries({ timeoutMs, maxJobWaitMs, pollMs, retryBaseMs, minIntervalMs }))
     integer(value, name, 1, 2147483647);
 
@@ -66,7 +70,7 @@ export async function generateImages(prompts, options = {}) {
   let stoppedReason = null, active = 0, limit = Math.min(2, concurrency), cooldown = 0, successes = 0;
   const startedAt = new Date().toISOString();
   const settings = { model, width, height, seed, baseUrl };
-  const rows = prompts.map((prompt, index) => ({ index, prompt, status: 'pending', key: hash(JSON.stringify({ ...settings, prompt })) }));
+  const rows = prompts.map((prompt, index) => ({ index, prompt, seed: seeds?.[index] ?? seed, status: 'pending', key: hash(JSON.stringify({ ...settings, seed: seeds?.[index] ?? seed, prompt })) }));
   const unique = [...new Map(rows.map(row => [row.key, row])).values()];
   let next = 0, writeQueue = Promise.resolve();
   const manifest = () => ({ version: 1, startedAt, updatedAt: new Date().toISOString(), settings,
@@ -149,7 +153,7 @@ export async function generateImages(prompts, options = {}) {
     let jobId = cached?.jobId;
     let response;
     if (!jobId) {
-      const params = new URLSearchParams({ model, width: String(width), height: String(height), seed: String(seed) });
+      const params = new URLSearchParams({ model, width: String(width), height: String(height), seed: String(row.seed) });
       response = await request(`/image/${encodeURIComponent(row.prompt)}?${params}`, { image: true });
       if (response.status === 202) {
         jobId = JSON.parse(response.bytes.toString()).id;

@@ -12,8 +12,8 @@ async function settled(job: LessonJob): Promise<void> {
   assert.ok(!["writing", "rendering"].includes(job.status), "job must finish");
 }
 
-test("web requests reject invalid source/options and never accept browser credentials", () => {
-  assert.deepEqual(validateLessonRequest({ ...request, apiKey: "untrusted", baseUrl: "https://untrusted.example" }), request);
+test("web requests accept a per-step key but never browser-selected provider endpoints", () => {
+  assert.deepEqual(validateLessonRequest({ ...request, apiKey: "user-key", baseUrl: "https://untrusted.example" }), { ...request, apiKey: "user-key" });
   for (const patch of [{ text: "  " }, { text: "x".repeat(80_001) }, { mode: "invalid" }, { audience: "" }, { audience: "x".repeat(301) }, { targetWords: 49 }, { targetWords: 2001 }, { targetWords: 100.2 }]) {
     assert.throws(() => validateLessonRequest({ ...request, ...patch }));
   }

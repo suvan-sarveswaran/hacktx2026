@@ -1,12 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { ProductionService } from "../src/production-service.js";
 import { createAppServer } from "../src/server.js";
 import { slidesPdf } from "./pdf-fixtures.js";
 import { setTimeout as delay } from "node:timers/promises";
 import type { PdfJob, LessonJob } from "../src/web-contract.js";
 
+async function isolatedServer(t: TestContext) {
+  const dataDir = await mkdtemp(join(tmpdir(), "entertainify-server-"));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  return createAppServer(false, new ProductionService({ dataDir }));
+}
+
 test("HTTP API validates requests, returns real narration chunks, and serves the original JSON download", async (t) => {
-  const server = await createAppServer();
+  const server = await isolatedServer(t);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
   const address = server.address();
@@ -36,7 +47,7 @@ test("HTTP API validates requests, returns real narration chunks, and serves the
 });
 
 test("PDF HTTP uploads produce editable source, then use the normal lesson endpoint", { timeout: 30_000 }, async (t) => {
-  const server = await createAppServer();
+  const server = await isolatedServer(t);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
   const address = server.address(); assert.ok(address && typeof address === "object");
