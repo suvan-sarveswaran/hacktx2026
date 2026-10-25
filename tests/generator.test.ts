@@ -1,13 +1,34 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { afterEach, beforeEach } from "node:test";
 import { generateScript, MAX_SOURCE_CHARACTERS } from "../src/generator.js";
 import type { ScriptOptions } from "../src/generator.js";
+import type { LlmProvider } from "../src/index.js";
 
 const requestOptions = {
+  provider: "openai" as const,
   apiKey: "test-key",
   model: "test-model",
   baseUrl: "https://api.openai.com/v1",
 };
+
+const providerEnvironmentKeys = [
+  "LLM_PROVIDER", "OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL",
+  "GROQ_API_KEY", "GROQ_MODEL", "GROQ_BASE_URL",
+];
+
+let previousValues = new Map<string, string | undefined>();
+
+beforeEach(() => {
+  previousValues = new Map(providerEnvironmentKeys.map((key) => [key, process.env[key]]));
+  for (const key of providerEnvironmentKeys) delete process.env[key];
+});
+
+afterEach(() => {
+  for (const [key, value] of previousValues) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
 
 function scriptResponse(content: unknown, extra: Record<string, unknown> = {}): Response {
   return Response.json({
@@ -27,6 +48,7 @@ test("generation makes one structured-output request and returns validated narra
     assert.equal(typeof init?.body, "string");
     const body = JSON.parse(init.body as string);
     assert.equal(body.model, "test-model");
+    assert.equal(body.reasoning_effort, undefined);
     assert.equal(body.messages[0].role, "system");
     assert.equal(body.messages[1].role, "user");
     assert.deepEqual(JSON.parse(body.messages[1].content), {
@@ -58,7 +80,95 @@ test("generation makes one structured-output request and returns validated narra
   assert.deepEqual(result, {
     title: "Energy's Day Job",
     script: "Energy changes forms.\nIt never clocks out.",
+    provider: "openai",
     model: "test-model",
+  });
+  assert.equal(fetchMock.mock.callCount(), 1);
+});
+
+test("Groq is the default and receives a single strict structured-output request", async (t) => {
+  process.env.GROQ_API_KEY = "groq-test-key";
+  process.env.OPENAI_API_KEY = "unused-openai-key";
+  process.env.OPENAI_MODEL = "unused-openai-model";
+  process.env.OPENAI_BASE_URL = "https://unused-openai.example/v1";
+  const fetchMock = t.mock.method(globalThis, "fetch", async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    assert.equal(input, "https://api.groq.com/openai/v1/chat/completions");
+    assert.equal(new Headers(init?.headers).get("authorization"), "Bearer groq-test-key");
+    const body = JSON.parse(init?.body as string);
+    assert.equal(body.model, "openai/gpt-oss-120b");
+    assert.equal(body.reasoning_effort, "low");
+    assert.equal(body.response_format.type, "json_schema");
+    assert.equal(body.response_format.json_schema.strict, true);
+    assert.deepEqual(body.response_format.json_schema.schema.required, ["title", "script"]);
+    return scriptResponse(JSON.stringify({ title: "A Leaf's Lunch", script: "Leaves turn light into lunch." }));
+  });
+
+  const result = await generateScript("Leaves capture light.");
+  assert.equal(result.provider, "groq");
+  assert.equal(result.model, "openai/gpt-oss-120b");
+  assert.equal(result.script, "Leaves turn light into lunch.");
+  assert.equal(fetchMock.mock.callCount(), 1);
+});
+
+test("provider-specific environment configuration and explicit options stay isolated", async (t) => {
+  process.env.LLM_PROVIDER = "openai";
+  process.env.OPENAI_API_KEY = "openai-env-key";
+  process.env.OPENAI_MODEL = "openai-env-model";
+  process.env.OPENAI_BASE_URL = "https://openai.example/v1";
+  process.env.GROQ_API_KEY = "groq-env-key";
+  process.env.GROQ_MODEL = "groq-env-model";
+  process.env.GROQ_BASE_URL = "https://groq.example/openai/v1";
+  const requests: { url: unknown; key: string | null; model: string }[] = [];
+  t.mock.method(globalThis, "fetch", async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    requests.push({
+      url: input,
+      key: new Headers(init?.headers).get("authorization"),
+      model: JSON.parse(init?.body as string).model,
+    });
+    return scriptResponse(JSON.stringify({ title: "Lesson", script: "Leaves capture light." }));
+  });
+
+  assert.equal((await generateScript("Lesson")).provider, "openai");
+  assert.equal((await generateScript("Lesson", { provider: "groq" })).provider, "groq");
+  assert.equal((await generateScript("Lesson", {
+    provider: "groq", apiKey: "explicit-key", model: "explicit-model", baseUrl: "https://explicit.example/v1",
+  })).provider, "groq");
+  assert.deepEqual(requests, [
+    { url: "https://openai.example/v1/chat/completions", key: "Bearer openai-env-key", model: "openai-env-model" },
+    { url: "https://groq.example/openai/v1/chat/completions", key: "Bearer groq-env-key", model: "groq-env-model" },
+    { url: "https://explicit.example/v1/chat/completions", key: "Bearer explicit-key", model: "explicit-model" },
+  ]);
+});
+
+test("a missing Groq key or invalid provider never uses an available OpenAI key", async (t) => {
+  process.env.OPENAI_API_KEY = "unused-openai-key";
+  const fetchMock = t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("Unexpected network request");
+  });
+  await assert.rejects(generateScript("Lesson"), /GROQ_API_KEY/);
+  await assert.rejects(generateScript("Lesson", {
+    provider: "unsupported" as LlmProvider,
+    apiKey: "test-key",
+  }), /provider/i);
+  process.env.LLM_PROVIDER = "unsupported";
+  await assert.rejects(generateScript("Lesson", { apiKey: "test-key" }), /provider/i);
+  assert.equal(fetchMock.mock.callCount(), 0);
+});
+
+test("a Groq quota error makes no retry or paid-provider fallback", async (t) => {
+  process.env.GROQ_API_KEY = "groq-test-key";
+  process.env.OPENAI_API_KEY = "unused-openai-key";
+  const fetchMock = t.mock.method(globalThis, "fetch", async (input: Parameters<typeof fetch>[0]) => {
+    assert.equal(input, "https://api.groq.com/openai/v1/chat/completions");
+    return new Response("PRIVATE SOURCE AND SECRET", { status: 429 });
+  });
+  await assert.rejects(generateScript("Lesson"), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /Groq/);
+    assert.match(error.message, /HTTP 429/);
+    assert.match(error.message, /quota or rate limit/);
+    assert.doesNotMatch(error.message, /PRIVATE SOURCE|SECRET/);
+    return true;
   });
   assert.equal(fetchMock.mock.callCount(), 1);
 });
@@ -161,4 +271,16 @@ test("the timeout aborts a pending request and reports the configured duration",
   t.mock.timers.tick(25);
   await rejection;
   assert.equal(requestSignal?.aborted, true);
+});
+
+test("topic generation explicitly uses general knowledge while material mode stays unchanged", async (t) => {
+  t.mock.method(globalThis, "fetch", async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(init?.body as string);
+    assert.match(body.messages[0].content, /sourceText describes a topic to teach/);
+    assert.match(body.messages[0].content, /Use established general knowledge/);
+    assert.equal(JSON.parse(body.messages[1].content).sourceText, "Explain mitochondria to a 7th grader.");
+    return scriptResponse(JSON.stringify({ title: "Tiny Power Department", script: "Mitochondria help make ATP." }));
+  });
+  const result = await generateScript("Explain mitochondria to a 7th grader.", { ...requestOptions, inputMode: "topic" });
+  assert.equal(result.title, "Tiny Power Department");
 });

@@ -3,6 +3,7 @@ import test from "node:test";
 import { entertainify } from "../src/pipeline.js";
 
 const requestOptions = {
+  provider: "openai" as const,
   apiKey: "test-key",
   model: "test-model",
   baseUrl: "https://api.openai.com/v1",
@@ -42,6 +43,7 @@ test("the full pipeline preserves narration, creates usable chunks, and only req
   }
   assert.match(narration.slice(previousEnd), /^\s*$/u);
   assert.equal(result.metadata.model, "test-model");
+  assert.equal(result.metadata.provider, "openai");
   assert.equal(result.metadata.wordCount, narration.split(/\s+/u).length);
   assert.equal(result.metadata.chunkCount, result.chunks.length);
   assert.equal(result.metadata.estimatedDurationSeconds, result.metadata.wordCount / 2);

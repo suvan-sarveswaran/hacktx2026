@@ -1,6 +1,7 @@
 node_modules/
 .pnpm-store/
 dist/
+web-dist/
 .test-build/
 .env
 .env.*

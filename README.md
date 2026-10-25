@@ -1,8 +1,41 @@
 # Entertainify
 
-Turn educational text into an entertaining, factual YouTube narration script and small chunks for future illustrations. This TypeScript starter implements **text → OpenAI script → local narration chunks**.
+Turn educational text into an entertaining, factual YouTube narration script and small chunks for future illustrations. This TypeScript starter implements **text → LLM script → local narration chunks**. Generation defaults to Groq, which offers a free developer tier, with OpenAI available as an explicit alternative.
 
 The writing prompt asks for approachable explanations, dry humor, and useful visual analogies while keeping the teaching content grounded in the supplied material. The narration uses an original, conversational voice.
+
+## Interactive dashboard
+
+Entertainify now includes a React + Tailwind dashboard with custom SVG doodles and pixel sprites, an interactive comic landing page, expanding full-screen panels, a drawing pad, and a lesson studio. Fonts are bundled locally; no external image or font service is needed.
+
+After installing the dependencies and configuring `.env` below, start the site:
+
+```sh
+npm run dev
+```
+
+Open **http://127.0.0.1:3000**. On PowerShell, use `npm.cmd` if needed. Both the API and Vite share this address. The existing CLI commands still work unchanged.
+
+- **Upload text:** choose or drop a UTF-8 `.txt` / `.md` file, or paste course material. AI writes the narration and the existing chunker creates the visual plan.
+- **Existing narration:** check “I already have a narration script” to keep the original words and run the local chunker without any AI request.
+- **From scratch:** describe a topic and choose an audience and approximate runtime. A topic-specific prompt teaches from general knowledge rather than treating the request as source evidence.
+- **Sample lesson:** a clearly marked, prewritten mitochondria lesson demonstrates real scene splitting without an API key or renderer.
+- **Results:** read the narration, explore or play a silent storyboard, download the exact `PipelineResult` JSON, and watch the finished video when the renderer is connected. Placeholder doodles in a storyboard are not generated illustrations.
+- **My lessons:** recent titles are saved in this browser. Source drafts and the current job ID stay in browser session storage. Server jobs are held in memory for up to one hour (maximum 40), and disappear on restart or capacity eviction. Download JSON to retain it.
+
+To build and run the production app locally:
+
+```sh
+npm run build
+npm run build:web
+npm run start:web
+```
+
+The frontend is in `web/`; the HTTP server and integration are in `src/server.ts`, `src/lesson-service.ts`, and `src/video-renderer.ts`. Type-check both with `npm run typecheck`, and run the suite with `npm test`. Node **22.18+ or 24+** is recommended for the dashboard toolchain.
+
+The video stage is intentionally a separate adapter for your partner's pipeline. Set `VIDEO_RENDERER_URL` in `.env` when that service is ready, then restart the server. Without it, the app honestly stops at “script & scene plan ready.” See **[the video pipeline merge guide](docs/video-pipeline.md)** for the exact endpoints, status shape, and in-process integration option. No reformatting of existing lesson JSON is needed.
+
+The local server binds to `127.0.0.1` by default. It applies a 400 KB request-body limit, 80,000-character source cap, three concurrent jobs, and ten job requests per minute per socket IP. These are demo safeguards, not a public authentication system. Before hosting publicly, add user authentication, durable job storage, and deployment-aware rate limits. Provider keys and the optional renderer token remain on the server.
 
 ## Setup
 
@@ -22,14 +55,16 @@ npm install
 cp .env.example .env
 ```
 
-In PowerShell, use `Copy-Item .env.example .env` for the second command. Edit `.env` and set `OPENAI_API_KEY` to your own key, then build and run:
+In PowerShell, use `Copy-Item .env.example .env` for the second command. Create a free [Groq Console account and API key](https://console.groq.com/keys), then edit `.env` and set `GROQ_API_KEY` to that key. Keep the account on the Free plan; a payment method is not required. Groq is a separate company from xAI's **Grok**, so your Grok account does not supply this key. See [Groq's billing FAQ](https://console.groq.com/docs/billing-faqs) for the Free and paid Developer plans.
+
+Build and run:
 
 ```sh
 npm run build
 npm start -- --input examples/source.txt --output output/lesson.json
 ```
 
-`npm start` loads `.env` automatically. Keep API keys out of source control. OpenAI generation requires an API key and may incur usage charges.
+`npm start` loads `.env` automatically. Keep API keys out of source control. Free Groq usage has shared request and token limits; generation returns an error when those limits are reached. The program does not retry automatically or fall back to a paid provider.
 
 TypeScript is a **local development dependency**, installed by `npm install`; a global `tsc` command is not required. `npm run build` uses the project's compiler, and `npx tsc --version` checks its version.
 
@@ -72,7 +107,7 @@ Tune the chunk safety limit and estimated speaking speed:
 npm start -- --chunk-only --input examples/narration.txt --max-chunk-words 8 --wpm 150
 ```
 
-`--words` controls the approximate total script length (50–2,000 words, default 450). `--max-chunk-words` sets a hard limit for a chunk; visual words usually produce shorter chunks. Source text is limited to 80,000 characters for generation. `--audience` accepts up to 300 characters, and `--model` overrides the configured generation model. Generation flags are rejected with `--chunk-only` to catch mistakes. Use `npm start -- --help` for all flags.
+`--words` controls the approximate total script length (50–2,000 words, default 450). `--max-chunk-words` sets a hard limit for a chunk; visual words usually produce shorter chunks. Source text is limited to 80,000 characters for generation, but a free provider's token limit can be reached with much shorter inputs. `--audience` accepts up to 300 characters. `--provider groq|openai` selects the provider, and `--model` overrides that provider's configured model. Generation flags are rejected with `--chunk-only` to catch mistakes. Use `npm start -- --help` for all flags.
 
 ## Use from TypeScript
 
@@ -94,7 +129,7 @@ const lesson = await entertainify(
 console.log(lesson.script);
 console.log(lesson.chunks);
 
-// Local splitting also works independently of OpenAI.
+// Local splitting also works independently of any LLM provider.
 const chunks = chunkScript("Light arrives. The leaf gets to work.");
 ```
 
@@ -104,12 +139,26 @@ Configuration is available through environment variables or per-call options:
 
 | Setting | Environment variable | Per-call option | Default |
 | --- | --- | --- | --- |
-| API key | `OPENAI_API_KEY` | `apiKey` | Required for generation |
-| Model | `OPENAI_MODEL` | `model` | `gpt-4.1-mini` |
-| API base URL | `OPENAI_BASE_URL` | `baseUrl` | `https://api.openai.com/v1` |
+| Provider | `LLM_PROVIDER` | `provider` | `groq` (`groq` or `openai`) |
+| Groq API key | `GROQ_API_KEY` | `apiKey` | Required when using Groq |
+| Groq model | `GROQ_MODEL` | `model` | `openai/gpt-oss-120b` |
+| Groq API base URL | `GROQ_BASE_URL` | `baseUrl` | `https://api.groq.com/openai/v1` |
+| OpenAI API key | `OPENAI_API_KEY` | `apiKey` | Required when using OpenAI |
+| OpenAI model | `OPENAI_MODEL` | `model` | `gpt-4.1-mini` |
+| OpenAI API base URL | `OPENAI_BASE_URL` | `baseUrl` | `https://api.openai.com/v1` |
 | Request timeout | — | `timeoutMs` | `120000` milliseconds |
 
-Per-call values override environment variables. An alternative API base URL must support the OpenAI request format and structured output used by this project. The script generator requests a structured title and narration; see [OpenAI's Structured Outputs documentation](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=chat).
+Per-call values override environment variables. `apiKey`, `model`, and `baseUrl` apply to the selected provider. Existing OpenAI configurations must explicitly set `LLM_PROVIDER=openai` or pass `--provider openai`; this uses separately billed OpenAI API access.
+
+The script generator requests a structured title and narration. Groq provides an [OpenAI-compatible endpoint](https://console.groq.com/docs/openai), and the default `openai/gpt-oss-120b` model supports [strict structured outputs](https://console.groq.com/docs/structured-outputs). Its `openai/` model prefix identifies the model family; requests still go to Groq using the Groq key. Any alternative model or endpoint must support the same request format and strict JSON schema.
+
+## Free usage and a public website
+
+The CLI, library, and dashboard call `entertainify` **on the server** and store the provider key in server environment variables. Never put the key in browser code or return it to visitors.
+
+All visitors using your Groq key share the organization's free quota. Check the current [Groq rate limits](https://console.groq.com/docs/rate-limits) and your account's limits before deployment. The local dashboard includes input caps, concurrency limits, and basic IP request limits; public deployment still needs per-user controls. Free-tier access can support a hackathon demo, but does not guarantee unlimited public traffic. If a large lesson exceeds the allowance, shorten the source or request a shorter script with `--words`.
+
+An OpenAI or Grok consumer account is not a shared free backend credential for a public website. OpenAI's [Sign in with ChatGPT integration](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt) can let eligible Plus/Pro users authorize use of **their own** plan allowance. The documented local open-source/personal integration does not grant general hosted-app access; hosted or paid apps need approval through the access process. That would require a separate per-user sign-in integration, and would not pool your subscription for every visitor. This starter uses provider API keys instead.
 
 ## Output
 
@@ -118,9 +167,9 @@ Each result includes:
 - `title`: the generated lesson title; `Provided narration` in chunk-only mode.
 - `script`: the complete narration, retained so future image prompts can use the context of the entire lesson.
 - `chunks`: ordered objects containing `index`, `text`, `startOffset`, `endOffset`, `wordCount`, `estimatedDurationSeconds`, and the rendering hints below.
-- `metadata`: `model`, `wordCount`, `chunkCount`, `estimatedDurationSeconds`, `generationMs`, and `chunkingMs`.
+- `metadata`: `provider`, `model`, `wordCount`, `chunkCount`, `estimatedDurationSeconds`, `generationMs`, and `chunkingMs`.
 
-Offsets locate chunks in the original `script` using JavaScript string indices: `script.slice(startOffset, endOffset)` gives the chunk text. Chunk-only mode uses `model: "none"` and `generationMs: 0`.
+Offsets locate chunks in the original `script` using JavaScript string indices: `script.slice(startOffset, endOffset)` gives the chunk text. Chunk-only mode uses `provider: "none"`, `model: "none"`, and `generationMs: 0`.
 
 Each chunk includes three fields to help choose a visual:
 
@@ -175,7 +224,7 @@ Chunks are typically 1–5 words. The default safety limit is **8 words per chun
 
 Generic verbs such as “use” and “help” attach to adjacent content when possible, within the same sentence and the word limit. This avoids unnecessary fragments such as `"use"`, `"light to"`, and `"help"`, combining them into `"use light to help"`. If a fragment still has no clear visual focus, its text hint lets the video display the words instead.
 
-PDF parsing, image prompt generation, image generation, voice synthesis, and video assembly are future stages. They are not included in this starter.
+PDF/slideshow parsing, image prompt generation, image generation, voice synthesis, and video assembly are separate stages. The dashboard accepts exported text and has a ready-to-connect video renderer adapter; it does not implement your partner's image/audio/video pipeline.
 
 ## Checks
 
@@ -184,4 +233,4 @@ npm run build
 npm test
 ```
 
-The local examples and chunk-only mode work without credentials. A live generation run requires your OpenAI API key.
+The local examples and chunk-only mode work without credentials. A live generation run requires a key for the selected provider; the default is a free-tier Groq API key.

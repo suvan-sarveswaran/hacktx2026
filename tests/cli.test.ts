@@ -16,6 +16,10 @@ function runCli(args: string[], input?: string) {
   delete env.OPENAI_API_KEY;
   delete env.OPENAI_MODEL;
   delete env.OPENAI_BASE_URL;
+  delete env.LLM_PROVIDER;
+  delete env.GROQ_API_KEY;
+  delete env.GROQ_MODEL;
+  delete env.GROQ_BASE_URL;
   return spawnSync(process.execPath, [cliPath, ...args], {
     encoding: "utf8",
     input: input ?? "",
@@ -44,6 +48,7 @@ function assertOfflineResult(result: PipelineResult, script: string): void {
   assert.equal(result.script, script);
   assert.equal(result.title, "Provided narration");
   assert.equal(result.metadata.model, "none");
+  assert.equal(result.metadata.provider, "none");
   assert.equal(result.metadata.generationMs, 0);
   assert.equal(result.metadata.chunkCount, result.chunks.length);
   assert.ok(result.chunks.length > 0);
@@ -155,12 +160,12 @@ test("CLI rejects invalid numeric flags before generation", () => {
     assert.equal(result.status, 1, JSON.stringify(args));
     assert.equal(result.stdout, "");
     assert.match(result.stderr, /^Entertainify: /);
-    assert.doesNotMatch(result.stderr, /Set OPENAI_API_KEY/);
+    assert.doesNotMatch(result.stderr, /Set (?:OPENAI|GROQ)_API_KEY/);
   }
 });
 
 test("CLI rejects generation-only flags in offline mode", () => {
-  for (const args of [["--words", "100"], ["--audience", "students"], ["--model", "some-model"]]) {
+  for (const args of [["--words", "100"], ["--audience", "students"], ["--model", "some-model"], ["--provider", "groq"]]) {
     const result = runCli(["--chunk-only", "--text", narration, ...args]);
     assert.equal(result.status, 1, JSON.stringify(args));
     assert.equal(result.stdout, "");
@@ -168,13 +173,28 @@ test("CLI rejects generation-only flags in offline mode", () => {
   }
 });
 
-test("CLI reports a missing API key without making a live request", () => {
-  const result = runCli(["--text", narration]);
+test("CLI reports the selected provider's missing key without making a live request", () => {
+  for (const { args, key } of [
+    { args: [], key: "GROQ_API_KEY" },
+    { args: ["--provider", "groq"], key: "GROQ_API_KEY" },
+    { args: ["--provider", "openai"], key: "OPENAI_API_KEY" },
+  ]) {
+    const result = runCli(["--text", narration, ...args]);
+    assert.ifError(result.error);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, new RegExp(`Set ${key}`));
+    assert.match(result.stderr, /--chunk-only/);
+  }
+});
+
+test("CLI rejects unsupported providers before requesting a key", () => {
+  const result = runCli(["--text", narration, "--provider", "unsupported"]);
   assert.ifError(result.error);
   assert.equal(result.status, 1);
   assert.equal(result.stdout, "");
-  assert.match(result.stderr, /Set OPENAI_API_KEY/);
-  assert.match(result.stderr, /--chunk-only/);
+  assert.match(result.stderr, /provider/i);
+  assert.doesNotMatch(result.stderr, /Set (?:OPENAI|GROQ)_API_KEY/);
 });
 
 test("CLI help works without input or credentials", () => {
@@ -183,5 +203,6 @@ test("CLI help works without input or credentials", () => {
   assert.match(result.stdout, /Usage:/);
   assert.match(result.stdout, /--chunk-only/);
   assert.match(result.stdout, /--max-chunk-words/);
+  assert.match(result.stdout, /--provider/);
   assert.equal(result.stderr, "");
 });

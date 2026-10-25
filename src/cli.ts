@@ -22,7 +22,8 @@ Output:
   -o, --output <path>             Write JSON to a file (default: stdout)
       --words <number>            Approximate narration length in words
       --audience <description>    Intended audience
-      --model <name>              Override OPENAI_MODEL
+      --provider <groq|openai>    Override LLM_PROVIDER (default: groq)
+      --model <name>              Override the selected provider's model
 
 Chunking:
       --max-chunk-words <number>  Safety limit per visual chunk (default: 8)
@@ -30,7 +31,9 @@ Chunking:
 
   -h, --help                     Show this help
 
-Generation requires OPENAI_API_KEY. npm start loads .env if it exists.
+Generation requires GROQ_API_KEY (or OPENAI_API_KEY when selected).
+Use a Groq Free-tier account for free generation within its shared quota.
+npm start loads .env if it exists. OpenAI API usage is billed separately.
 Chunks begin at visual words or phrases and stay within sentence boundaries.
 Chunk timings are estimates; align them to the voiceover before rendering video.
 `;
@@ -76,6 +79,7 @@ async function main(): Promise<void> {
       output: { type: "string", short: "o" },
       words: { type: "string" },
       audience: { type: "string" },
+      provider: { type: "string" },
       model: { type: "string" },
       "chunk-only": { type: "boolean", default: false },
       "max-chunk-words": { type: "string" },
@@ -95,6 +99,10 @@ async function main(): Promise<void> {
   const inputPath = nonempty(values.input, "--input");
   const outputPath = nonempty(values.output, "--output");
   const model = nonempty(values.model, "--model");
+  const provider = nonempty(values.provider, "--provider");
+  if (provider !== undefined && provider !== "groq" && provider !== "openai") {
+    throw new Error("--provider must be groq or openai.");
+  }
   const audience = nonempty(values.audience, "--audience");
   const targetWords = positiveInteger(values.words, "--words");
   const maxWords = positiveInteger(values["max-chunk-words"], "--max-chunk-words");
@@ -104,8 +112,8 @@ async function main(): Promise<void> {
     ...(wordsPerMinute === undefined ? {} : { wordsPerMinute }),
   };
 
-  if (values["chunk-only"] && (model !== undefined || audience !== undefined || targetWords !== undefined)) {
-    throw new Error("--model, --audience, and --words apply to script generation and cannot be used with --chunk-only.");
+  if (values["chunk-only"] && (provider !== undefined || model !== undefined || audience !== undefined || targetWords !== undefined)) {
+    throw new Error("--provider, --model, --audience, and --words apply to script generation and cannot be used with --chunk-only.");
   }
 
   let sourceText: string;
@@ -130,6 +138,7 @@ async function main(): Promise<void> {
       script: sourceText,
       chunks,
       metadata: {
+        provider: "none",
         model: "none",
         wordCount: chunks.reduce((total, chunk) => total + chunk.wordCount, 0),
         chunkCount: chunks.length,
@@ -141,6 +150,7 @@ async function main(): Promise<void> {
   } else {
     process.stderr.write("Generating narration and splitting it into chunks...\n");
     result = await entertainify(sourceText, {
+      ...(provider === undefined ? {} : { provider }),
       ...(model === undefined ? {} : { model }),
       ...(audience === undefined ? {} : { audience }),
       ...(targetWords === undefined ? {} : { targetWords }),
