@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { CSSProperties, PointerEvent } from "react";
 import { AnimatePresence, motion, MotionConfig, useReducedMotion } from "motion/react";
-import { ArrowDown, ArrowDownLeft, ArrowRight, ArrowUpRight, ChevronLeft, Film, FolderOpen, Pause, Play, Sparkles, Upload, Volume2, VolumeX, X } from "lucide-react";
-import type { LessonSummary, Workflow } from "../../src/web-contract";
+import { ArrowDown, ArrowDownLeft, ArrowRight, ArrowUpRight, ChevronLeft, Film, FolderOpen, Pause, Play, Sparkles, Volume2, VolumeX, X } from "lucide-react";
+import type { LessonSummary, LessonFormat } from "../../src/web-contract";
 import { api } from "./api";
 import { Book, Brain, DoodlePad, Pencil, Pixel, Spark, SpriteFlights } from "./Art";
-import { Mystery, Studio } from "./Studio";
+import { Studio } from "./Studio";
 import { LessonWorkspace, isProducing, statusLabel } from "./lesson-workspace";
 
-type Panel = "upload" | "scratch" | "mystery" | "library";
-const panelColors = { upload: "#c8d8ee", scratch: "#d0dfb9", mystery: "#302743", library: "#f3c9ce" };
+type Panel = LessonFormat | "library";
+const panelColors = { youtube: "#c8d8ee", short: "#d0dfb9", comic: "#f5dfa3", library: "#f3c9ce" };
+const formatName = (kind?: string) => kind === "comic" ? "Comic Book" : kind === "short" ? "Short-form" : "YouTube Video";
 const facts = [
   ["Your brain is not a USB drive.", "Understanding beats downloading. Make the idea make sense."],
   ["Mitochondria need a union.", "All that energy production. Not a single vacation day."],
@@ -44,7 +45,7 @@ export default function App() {
   }, [workspace]);
 
   const close = useCallback(() => setActive(null), []);
-  useEffect(() => { dialog.current?.scrollTo({ top: 0 }); }, [active, state.selected.upload, state.selected.scratch]);
+  useEffect(() => { dialog.current?.scrollTo({ top: 0 }); }, [active, state.selected.youtube, state.selected.short, state.selected.comic]);
   useEffect(() => {
     if (!active) return;
     const previousFocus = openerRef.current;
@@ -82,12 +83,12 @@ export default function App() {
   }
 
   function restore(lesson: LessonSummary) {
-    const kind = lesson.workflow ?? "upload";
+    const kind: LessonFormat = lesson.workflow === "comic" || lesson.workflow === "short" ? lesson.workflow : "youtube";
     workspace.select(kind, lesson.id);
     open(kind);
     void workspace.refresh(lesson.id);
   }
-  function newLesson(kind: Workflow) { workspace.select(kind, null); open(kind); }
+  function newLesson(kind: LessonFormat) { workspace.select(kind, null); open(kind); }
 
   function tilt(event: PointerEvent<HTMLElement>) {
     if (noMotion || event.pointerType !== "mouse") return;
@@ -105,18 +106,12 @@ export default function App() {
 
       <main className="comic-grid">
         <section className="comic-panel hero-panel" onPointerMove={tilt} onPointerLeave={(e) => { e.currentTarget.style.setProperty("--mx", "0px"); e.currentTarget.style.setProperty("--my", "0px"); }}>
-          <div className="hero-copy"><span className="eyebrow"><span className="tiny-star">✳</span> BORING LESSONS, MEET YOUR PLOT TWIST.</span><h1>Your textbook.<br/>But <span className="fun-word">actually fun.<svg viewBox="0 0 420 18" preserveAspectRatio="none" aria-hidden="true"><path d="M3 9Q100 0 207 9T417 6M11 16Q240 7 399 14"/></svg></span></h1><p>Turn your notes into little stories, big “aha!” moments,<br className="desktop-break"/> and videos you’ll actually want to watch.</p><div className="hero-bottom"><span className="handwriting">less snooze. more aha.</span><ArrowDownLeft className="hero-arrow" size={34}/><span className="hero-annotation">PICK YOUR<br/>ADVENTURE BELOW</span></div></div>
+          <div className="hero-copy"><span className="eyebrow"><span className="tiny-star">✳</span> BORING LESSONS, MEET YOUR PLOT TWIST.</span><h1>Your textbook.<br/>But <span className="fun-word">actually fun.<svg viewBox="0 0 420 18" preserveAspectRatio="none" aria-hidden="true"><path d="M3 9Q100 0 207 9T417 6M11 16Q240 7 399 14"/></svg></span></h1><p>Turn your notes into little stories, big “aha!” moments,<br className="desktop-break"/> and a lesson you’ll actually want to finish.</p><div className="hero-bottom"><span className="handwriting">less snooze. more aha.</span><ArrowDownLeft className="hero-arrow" size={34}/><span className="hero-annotation">PICK YOUR<br/>ADVENTURE BELOW</span></div></div>
           <div className="hero-character"><div className="speech-bubble">wait…<br/>I get it now.</div><Brain/><Spark className="hero-spark"/><div className="ground-shadow"/></div>
           <span className="hero-corner">EST. RIGHT NOW ↗</span>
         </section>
 
-        <section className="comic-panel demo-panel placeholder-widget" aria-label="Coming soon widget"><span className="eyebrow">A LITTLE SPACE FOR SOMETHING NEW</span><Spark className="placeholder-spark"/><span className="handwriting">More curiosity, coming soon.</span><div className="panel-bottom"><span>COMING SOON</span></div></section>
-
-        <motion.button layoutId="panel-upload" className="comic-panel action-panel upload-panel" initial={false} animate={{ rotate: -1.4 }} onClick={(e) => open("upload", e.currentTarget)} whileHover={noMotion ? {} : { y: -5, rotate: -2.1 }} whileTap={{ scale: .985 }} aria-label="Upload text"><div className="panel-kicker"><span className="issue-number">01</span><span className="eyebrow">START WITH WHAT YOU HAVE</span><span className="mini-star">✳</span></div><div className="action-main"><div><h2>Text in.<br/>Fun out.</h2><p>Your lecture notes deserve<br/>a better second act.</p></div><Book className="action-art"/></div><div className="panel-bottom"><span className="panel-link"><Upload size={16}/>UPLOAD TEXT</span><span className="round-arrow"><ArrowUpRight size={20}/></span></div><span className="panel-footnote">.PDF / .TXT / .MD / COPY + PASTE</span></motion.button>
-
-        <motion.button layoutId="panel-scratch" className="comic-panel action-panel scratch-panel" initial={false} animate={{ rotate: 1.35 }} onClick={(e) => open("scratch", e.currentTarget)} whileHover={noMotion ? {} : { y: -5, rotate: 2 }} whileTap={{ scale: .985 }} aria-label="Create from scratch"><div className="panel-kicker"><span className="issue-number">02</span><span className="eyebrow">START WITH A LITTLE CURIOSITY</span><span className="mini-star">✧</span></div><div className="action-main"><div><h2>Got a weird<br/>little question?</h2><p>Pick a topic. Any topic.<br/>Let’s make it click.</p></div><Pencil className="action-art"/></div><div className="panel-bottom"><span className="panel-link"><Sparkles size={16}/>FROM SCRATCH</span><span className="round-arrow"><ArrowUpRight size={20}/></span></div><span className="panel-footnote">“EXPLAIN MITOCHONDRIA LIKE I’M 12.”</span></motion.button>
-
-        <motion.button layoutId="panel-mystery" className="comic-panel mystery-panel" initial={false} animate={{ rotate: 2 }} onClick={(e) => open("mystery", e.currentTarget)} whileHover={noMotion ? {} : { y: -5, rotate: 2.7 }} aria-label="Open the coming soon mystery"><div className="panel-kicker"><span className="issue-number">03</span><span>✦</span></div><span className="mystery-spark one">✧</span><Pixel kind="ghost" className="panel-ghost"/><span className="mystery-spark two">✧</span><h2>???</h2><p>Good things<br/>are brewing.</p><div className="mystery-tag">COMING SOON</div><span className="mystery-bottom">DON’T BE A STRANGER <ArrowUpRight size={15}/></span></motion.button>
+        {(["youtube", "short", "comic"] as const).map((kind, index) => <motion.button key={kind} layoutId={`panel-${kind}`} className={`comic-panel action-panel format-panel ${kind === "youtube" ? "upload-panel" : kind === "short" ? "scratch-panel" : "comic-book-panel"}`} initial={false} animate={{ rotate: index === 1 ? 1.35 : -1.4 }} onClick={(e) => open(kind, e.currentTarget)} whileHover={noMotion ? {} : { y: -5, rotate: index === 1 ? 2 : -2.1 }} whileTap={{ scale: .985 }} aria-label={`Create ${formatName(kind)}`}><div className="panel-kicker"><span className="issue-number">0{index + 1}</span><span className="eyebrow">{kind === "youtube" ? "THE BIG PICTURE" : kind === "short" ? "SMALL SCREEN. BIG AHA." : "ONE IDEA. EVERY FRAME."}</span><span className="mini-star">✳</span></div><div className="action-main"><div><h2>{kind === "youtube" ? <>YouTube<br/>Video</> : kind === "short" ? <>Short-form</> : <>Comic<br/>Book</>}</h2><p>{kind === "youtube" ? <>Notes or a question.<br/>A story worth watching.</> : kind === "short" ? <>A little lesson on the go.<br/>Extra brainrot? Your call.</> : <>Turn the page.<br/>See the idea click.</>}</p></div>{kind === "comic" ? <Pencil className="action-art"/> : <Book className="action-art"/>}</div><div className="panel-bottom"><span className="panel-link">{kind === "comic" ? <Sparkles size={16}/> : <Film size={16}/>}CREATE {kind === "comic" ? "A COMIC" : "A VIDEO"}</span><span className="round-arrow"><ArrowUpRight size={20}/></span></div><span className="panel-footnote">PDF / TXT / MD / YOUR OWN PROMPT</span></motion.button>)}
 
         <section id="how-it-works" className="comic-panel how-panel"><div className="how-title"><span className="eyebrow">A VERY COMPLICATED PROCESS</span><span className="handwriting">(just kidding)</span></div><div className="how-steps"><div><span className="step-icon step-paper"><FileDoodle/></span><strong>Feed the brain</strong><p>Notes, a script,<br/>or a “what if?”</p></div><span className="step-arrow">⤳</span><div><span className="step-icon"><Spark className="w-12 text-[#ef9c82]"/></span><strong>Add a little weird</strong><p>AI turns the lesson<br/>into a story.</p></div><span className="step-arrow">⤳</span><div><span className="step-icon step-play"><Play size={23} fill="currentColor"/></span><strong>Get the “aha!”</strong><p>A lesson that<br/>actually sticks.</p></div></div></section>
 
@@ -130,16 +125,15 @@ export default function App() {
 
     <AnimatePresence>
       {active && <motion.div className="panel-flood" key="flood" style={{ background: panelColors[active] }} initial={{ clipPath: `circle(0% at ${origin.x}% ${origin.y}%)` }} animate={{ clipPath: `circle(150% at ${origin.x}% ${origin.y}%)` }} exit={{ opacity: 0 }} transition={{ duration: noMotion ? 0 : .7, ease: [.22, 1, .36, 1] }} />}
-      <motion.div hidden={!active} ref={dialog} key="workspace" role="dialog" aria-modal="true" aria-label={active === "upload" ? "Upload a lesson" : active === "scratch" ? "Create a lesson from scratch" : active === "library" ? "My lessons" : "The mystery room"} className={`studio-overlay ${active === "mystery" ? "dark-studio" : ""}`} style={{ "--studio-color": panelColors[active ?? "upload"] } as CSSProperties} transition={{ type: "spring", stiffness: 140, damping: 23 }}>
+      <motion.div hidden={!active} ref={dialog} key="workspace" role="dialog" aria-modal="true" aria-label={active === "library" ? "My lessons" : formatName(active ?? "youtube")} className="studio-overlay" style={{ "--studio-color": panelColors[active ?? "youtube"] } as CSSProperties} transition={{ type: "spring", stiffness: 140, damping: 23 }}>
         <div className="studio-topbar"><button ref={closeRef} className="back-button" onClick={close}><ChevronLeft size={17}/>Back to the comic</button><span className="studio-wordmark rainbow-wordmark">entertainify.</span><button className="close-button" onClick={close} aria-label="Close panel"><X size={19}/><span>ESC</span></button></div>
         <motion.div initial={{ opacity: 0, y: noMotion ? 0 : 25 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ delay: noMotion ? 0 : .22, duration: .35 }}>
-          {(["upload", "scratch"] as const).map(kind => {
+          {(["youtube", "short", "comic"] as const).map(kind => {
             const id = state.selected[kind];
             return <div key={kind} hidden={active !== kind}><Studio kind={kind} visible={active === kind} restoring={Boolean(id)} job={id ? state.jobs[id] ?? null : null} busy={state.busy[kind] || Boolean(id && !state.jobs[id] && !state.jobErrors[id])} error={id ? state.jobErrors[id] ?? "" : state.errors[kind]} onGenerate={request => workspace.create(kind, request)} onReset={() => newLesson(kind)} onRetryConnection={() => { if (id) void workspace.refresh(id); }} onUpdate={workspace.update}/></div>;
           })}
 
-          {active === "mystery" && <Mystery/>}
-          {active === "library" && <div className="studio-content"><div className="studio-heading"><div><span className="eyebrow">YOUR LITTLE COLLECTION OF AHA’S</span><h1>The good<br/><span>stuff stays here.</span></h1><p>Your videos, source text, and scripts, saved on this computer. Pick up right where you left off.</p><div className="result-actions"><button className="ink-button" onClick={() => newLesson("upload")}>New upload</button><button className="ink-button" onClick={() => newLesson("scratch")}>New topic</button></div></div><Book className="studio-art"/></div>{state.libraryError && <div className="error-box" role="alert">{state.libraryError}<button className="text-link" onClick={() => void workspace.refreshLibrary()}>Try again</button></div>}{state.libraryLoading ? <p role="status">Loading your saved lessons…</p> : recent.length ? <div className="lesson-library">{recent.map((lesson) => <button key={lesson.id} onClick={() => restore(lesson)} className="saved-lesson"><span className="saved-icon"><Film size={25}/></span><span><strong>{lesson.title}</strong><small>{lesson.workflow === "scratch" ? "From scratch" : "Upload"} · {statusLabel(lesson.status)} · {new Date(lesson.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</small></span><ArrowUpRight size={20}/></button>)}<p className="input-note mt-4">Projects survive browser and server restarts. Download the video, source, or script from any lesson.</p></div> : <div className="empty-library"><Pixel/><h2>A blank page. So much potential.</h2><p>Your first “aha!” is one good question away.</p><button className="ink-button primary" onClick={() => open("scratch")}>Make your first lesson <ArrowRight size={18}/></button></div>}</div>}
+          {active === "library" && <div className="studio-content"><div className="studio-heading"><div><span className="eyebrow">YOUR LITTLE COLLECTION OF AHA’S</span><h1>The good<br/><span>stuff stays here.</span></h1><p>Your videos, comics, source text, and scripts, saved on this computer. Pick up right where you left off.</p><div className="result-actions">{(["youtube", "short", "comic"] as const).map(kind => <button key={kind} className="ink-button" onClick={() => newLesson(kind)}>{formatName(kind)}</button>)}</div></div><Book className="studio-art"/></div>{state.libraryError && <div className="error-box" role="alert">{state.libraryError}<button className="text-link" onClick={() => void workspace.refreshLibrary()}>Try again</button></div>}{state.libraryLoading ? <p role="status">Loading your saved lessons…</p> : recent.length ? <div className="lesson-library">{recent.map((lesson) => <button key={lesson.id} onClick={() => restore(lesson)} className="saved-lesson"><span className="saved-icon"><Film size={25}/></span><span><strong>{lesson.title}</strong><small>{formatName(lesson.workflow)} · {statusLabel(lesson.status, lesson.workflow)} · {new Date(lesson.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</small></span><ArrowUpRight size={20}/></button>)}<p className="input-note mt-4">Projects survive browser and server restarts. Download the video, source, or script from any lesson.</p></div> : <div className="empty-library"><Pixel/><h2>A blank page. So much potential.</h2><p>Your first “aha!” is one good question away.</p><button className="ink-button primary" onClick={() => open("youtube")}>Make your first lesson <ArrowRight size={18}/></button></div>}</div>}
         </motion.div>
       </motion.div>
     </AnimatePresence>

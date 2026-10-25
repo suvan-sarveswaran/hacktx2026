@@ -15,12 +15,17 @@ export class RequestError extends Error {
 export function validateLessonRequest(value: unknown): LessonRequest {
   if (!value || typeof value !== "object") throw new RequestError("Please add your lesson text.");
   const body = value as Record<string, unknown>;
+  if (body.format !== undefined && !["youtube", "short", "comic"].includes(String(body.format))) throw new RequestError("Choose YouTube Video, Short-form, or Comic Book.");
+  if (body.brainrot !== undefined && typeof body.brainrot !== "boolean") throw new RequestError("Choose whether to include gameplay.");
+  if (body.brainrot === true && body.format !== "short") throw new RequestError("Gameplay is available in Short-form only.");
+  if (body.comicPanels !== undefined && ![4, 6, 8].includes(body.comicPanels as number)) throw new RequestError("Choose 4, 6, or 8 comic panels.");
+  if (body.format === "comic" && body.mode === "script") throw new RequestError("Comics need a storyboard. Use source material or a topic.");
   if (typeof body.text !== "string" || !body.text.trim()) throw new RequestError("Your page is blank. Add a little knowledge first!");
   if (body.text.length > MAX_SOURCE_CHARACTERS) throw new RequestError("This lesson is a little too big. Please keep it under 80,000 characters.");
   if (!["material", "topic", "script"].includes(String(body.mode))) throw new RequestError("Choose a text upload, topic, or existing script.");
   if (typeof body.audience !== "string" || !body.audience.trim() || body.audience.length > 300) throw new RequestError("Choose an audience (1–300 characters).");
   if (typeof body.targetWords !== "number" || !Number.isInteger(body.targetWords) || body.targetWords < 50 || body.targetWords > 2000) throw new RequestError("Script length must be between 50 and 2,000 words.");
-  return { text: body.text.trim(), mode: body.mode as LessonRequest["mode"], audience: body.audience.trim(), targetWords: body.targetWords, ...(typeof body.apiKey === "string" ? { apiKey: body.apiKey } : {}) };
+  return { text: body.text.trim(), mode: body.mode as LessonRequest["mode"], audience: body.audience.trim(), targetWords: body.targetWords, ...(body.format ? { format: body.format as NonNullable<LessonRequest["format"]> } : {}), ...(body.brainrot !== undefined ? { brainrot: body.brainrot as boolean } : {}), ...(body.comicPanels !== undefined ? { comicPanels: body.comicPanels as NonNullable<LessonRequest["comicPanels"]> } : {}), ...(typeof body.apiKey === "string" ? { apiKey: body.apiKey } : {}) };
 }
 
 export function parseNarration(script: string, title = "Your original narration"): PipelineResult {

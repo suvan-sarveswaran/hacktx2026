@@ -16,7 +16,7 @@ test("upload and topic requests run independently and are listed before scripts 
   assert.equal(calls, 2);
   scratch.resolve(job("topic", { workflow: "scratch" })); await second;
   upload.resolve(job("upload")); await first; await duplicate;
-  assert.deepEqual(workspace.snapshot().selected, { upload: "upload", scratch: "topic" });
+  assert.deepEqual(workspace.snapshot().selected, { youtube: null, short: null, comic: null, upload: "upload", scratch: "topic" });
   assert.equal(workspace.snapshot().recent.length, 2);
   assert.ok(workspace.snapshot().recent.every(row => row.status === "writing"));
 });
@@ -62,7 +62,7 @@ test("selection survives reload and polling continues on unselected running less
   const first = new LessonWorkspace(api, storage);
   first.select("upload", upload); first.select("scratch", scratch);
   const restored = new LessonWorkspace(api, storage);
-  assert.deepEqual(restored.snapshot().selected, { upload, scratch });
+  assert.deepEqual(restored.snapshot().selected, { youtube: null, short: null, comic: null, upload, scratch });
   restored.update(job("background"));
   await restored.poll();
   assert.deepEqual(new Set(ids), new Set([upload, scratch, "background"]));

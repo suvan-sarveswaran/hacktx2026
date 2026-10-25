@@ -14,6 +14,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  uploadGameplay: (id: string, file: File) => request<LessonJob>(`/api/lessons/${encodeURIComponent(id)}/clip`, { method: "POST", headers: { "Content-Type": "video/mp4" }, body: file, signal: AbortSignal.timeout(120_000) }),
   list: () => request<LessonSummary[]>("/api/lessons"),
   stage: (id: string, stage: string, body: StageRequest = {}) => request<LessonJob>(`/api/lessons/${encodeURIComponent(id)}/${stage}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   voices: (apiKey: string) => request<{ voices: { id: string; name: string }[] }>("/api/voices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey }) }),

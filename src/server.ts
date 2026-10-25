@@ -69,13 +69,22 @@ export async function createAppServer(dev = false, service = new ProductionServi
         }
         if (req.method === "POST") {
           if (path === "/api/demo") throw new RequestError("The sample storyboard has been retired. Start a lesson from upload or a topic.", 410);
-          const stage = /^\/api\/lessons\/([a-f0-9-]+)\/(script|plan|images|video|settings|stop)$/.exec(path);
-          if (!["/api/lessons", "/api/documents", "/api/voices"].includes(path) && !stage) throw new RequestError("Page not found.", 404);
+          const stage = /^\/api\/lessons\/([a-f0-9-]+)\/(script|plan|images|video|comic|settings|stop)$/.exec(path);
+          const clip = /^\/api\/lessons\/([a-f0-9-]+)\/clip$/.exec(path);
+          if (!["/api/lessons", "/api/documents", "/api/voices"].includes(path) && !stage && !clip) throw new RequestError("Page not found.", 404);
           const now = Date.now();
           for (const [key, value] of requests) if (value.until < now) requests.delete(key);
           const ip = req.socket.remoteAddress ?? "local";
           const limit = requests.get(ip) ?? { count: 0, until: now + 60_000 };
           if (limit.count >= 10) throw new RequestError("Too many requests. Give the studio a minute, then try again.", 429);
+          if (clip?.[1]) {
+            limit.count++; requests.set(ip, limit);
+            if (req.headers["content-type"]?.split(";")[0] !== "video/mp4") throw new RequestError("Upload an MP4 gameplay clip.", 415);
+            const chunks: Buffer[] = []; let size = 0;
+            if (Number(req.headers["content-length"]) > 100 * 1024 * 1024) throw new RequestError("Choose a gameplay clip under 100 MB.", 413);
+            for await (const chunk of req) { size += chunk.length; if (size > 100 * 1024 * 1024) throw new RequestError("Choose a gameplay clip under 100 MB.", 413); chunks.push(Buffer.from(chunk)); }
+            json(res, 200, await service.uploadGameplay(clip[1], Buffer.concat(chunks))); return;
+          }
           if (path === "/api/documents") {
             limit.count++; requests.set(ip, limit);
             json(res, 202, documents.create(await readPdf(req)));
@@ -132,7 +141,7 @@ export async function createAppServer(dev = false, service = new ProductionServi
           if (match[2]) {
             if (!job.result) throw new RequestError("The script is still being written.", 409);
             res.setHeader("Content-Disposition", 'attachment; filename="entertainify-lesson.json"');
-            json(res, 200, match[3] === "export" ? { ...job.result, artStyle: job.settings?.style, imageAspect: job.settings?.imageAspect, imageModel: job.settings?.imageModel, textStyle: job.settings?.textStyle, images: job.frames ?? [], outputs: job.outputs ?? [] } : job.result);
+            json(res, 200, match[3] === "export" ? { ...job.result, artStyle: job.settings?.style, imageAspect: job.settings?.imageAspect, imageModel: job.settings?.imageModel, textStyle: job.settings?.textStyle, images: job.frames ?? [], outputs: job.outputs ?? [], comicOutputs: job.comicOutputs ?? [], workflow: job.workflow } : job.result);
           } else json(res, 200, job);
           return;
         }

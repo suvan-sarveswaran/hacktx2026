@@ -7,7 +7,8 @@ import { pathToFileURL } from "node:url";
 import { entertainify } from "./pipeline.js";
 import type { PipelineResult } from "./pipeline.js";
 import { parseNarration, RequestError } from "./lesson-service.js";
-import { DEFAULT_SETTINGS, DIMENSIONS, ART_STYLES, LEGACY_DOODLE_STYLE } from "./production-settings.js";
+import { DEFAULT_SETTINGS, DIMENSIONS, ART_STYLES, LEGACY_DOODLE_STYLE, formatSettings } from "./production-settings.js";
+import { renderComic } from "./comic-renderer.js";
 import { imageTimeShare, MIN_PLANNED_IMAGE_SHARE, textFirstChunks, VISUAL_PLAN_VERSION } from "./visual-plan.js";
 import { planExistingLesson } from "./visual-planner.js";
 import type { LessonJob, LessonRequest, ProductionSettings, StageRequest } from "./web-contract.js";
@@ -17,7 +18,7 @@ interface ImageResult { scenes: { status: string; file?: string; error?: string 
 export interface MediaEngine {
   generateImages(prompts: string[], options: { apiKey: string; model: string; seeds?: number[]; outDir: string; width: number; height: number; signal: AbortSignal; concurrency: number; onProgress: (event: ImageEvent) => void }): Promise<ImageResult>;
   synthesizeNarration(script: string, options: { apiKey: string; voiceId: string; model: string; cacheDir: string; signal: AbortSignal }): Promise<{ audioPath: string; alignment: unknown; cached: boolean }>;
-  renderVideo(options: { lesson: PipelineResult; alignment: unknown; audioPath: string; mapping: Record<number, string>; fallbackText: boolean; requireImageMajority?: boolean; artStyle?: string; textStyle?: string; width: number; height: number; outputDir: string; signal: AbortSignal; onProgress: (message: string) => void }): Promise<unknown>;
+  renderVideo(options: { lesson: PipelineResult; alignment: unknown; audioPath: string; mapping: Record<number, string>; fallbackText: boolean; requireImageMajority?: boolean; artStyle?: string; textStyle?: string; brainrot?: boolean; gameplayPath?: string; captions?: boolean; width: number; height: number; outputDir: string; signal: AbortSignal; onProgress: (message: string) => void }): Promise<unknown>;
 }
 async function loadEngine(): Promise<MediaEngine> {
   const directory = resolve(process.cwd(), "studio");
@@ -33,6 +34,7 @@ export function requireKey(value: unknown, provider: string): string {
 export function validateSettings(input: unknown, current = DEFAULT_SETTINGS): ProductionSettings {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new RequestError("Choose valid production settings.");
   const raw = input as Partial<ProductionSettings>;
+  if (raw.brainrot !== undefined && typeof raw.brainrot !== "boolean") throw new RequestError("Choose whether to include gameplay.");
   // Pick only public settings: credentials and arbitrary payload fields must never reach disk.
   const settings = Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map(key => [key, raw[key as keyof ProductionSettings] ?? current[key as keyof ProductionSettings] ?? DEFAULT_SETTINGS[key as keyof ProductionSettings]])) as unknown as ProductionSettings;
   if (!["black-forest-labs/flux.1-schnell", "black-forest-labs/flux.2-klein-4b", "tongyi-mai/z-image-turbo", "openai/gpt-image-1-mini"].includes(settings.imageModel)) throw new RequestError("Choose a supported image model.");
@@ -74,19 +76,19 @@ export class ProductionService {
         renameSync(this.folder(id), join(archive, id));
         continue;
       }
-      saved.job.workflow = saved.request.mode === "topic" ? "scratch" : "upload";
+      saved.job.workflow = saved.request.format ?? (saved.request.mode === "topic" ? "scratch" : "upload");
       saved.job.recipe = { mode: saved.request.mode, audience: saved.request.audience, targetWords: saved.request.targetWords };
-      saved.job.settings = { ...DEFAULT_SETTINGS, ...saved.job.settings };
+      saved.job.settings = formatSettings(saved.job.workflow, { ...DEFAULT_SETTINGS, ...saved.job.settings });
       this.jobs.set(id, saved.job); this.requests.set(id, saved.request);
       if (running(saved.job)) {
-        saved.job.failedStage = saved.job.status === "writing" ? "script" : saved.job.status === "planning" ? "plan" : saved.job.status === "images" ? "images" : "video";
+        saved.job.failedStage = saved.job.status === "writing" ? "script" : saved.job.status === "planning" ? "plan" : saved.job.status === "images" ? "images" : saved.job.operation === "comic" ? "comic" : "video";
         saved.job.status = "failed"; saved.job.error = "Generation was interrupted by a restart. Continue with your key; saved assets will be reused.";
         this.save(saved.job);
       }
     }
   }
   get(id: string) { return this.jobs.get(id); }
-  list() { return [...this.jobs.values()].filter(job => !job.demo).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(job => ({ id: job.id, title: job.result?.title ?? job.sourceText?.slice(0, 80) ?? "New lesson", createdAt: job.createdAt, status: job.status, demo: job.demo, workflow: job.workflow })); }
+  list() { return [...this.jobs.values()].filter(job => !job.demo).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(job => ({ id: job.id, title: job.result?.title ?? job.sourceText?.slice(0, 80) ?? "New lesson", createdAt: job.createdAt, status: job.status, demo: job.demo, workflow: job.workflow ?? "upload" })); }
   private folder(id: string) { return join(this.dataDir, id); }
   private save(job: LessonJob) {
     job.revision = (job.revision ?? 0) + 1;
@@ -104,8 +106,9 @@ export class ProductionService {
   create(request: LessonRequest): LessonJob {
     this.checkCapacity();
     const key = request.mode !== "script" ? requireKey(request.apiKey, "Groq") : "";
-    const clean = { text: request.text, mode: request.mode, audience: request.audience, targetWords: request.targetWords };
-    const job: LessonJob = { id: randomUUID(), createdAt: new Date().toISOString(), status: "writing", progress: 5, message: "Writing a story worth listening to…", demo: false, workflow: request.mode === "topic" ? "scratch" : "upload", recipe: { mode: request.mode, audience: request.audience, targetWords: request.targetWords }, sourceText: request.text, settings: { ...DEFAULT_SETTINGS }, outputs: [] };
+    const clean = { text: request.text, mode: request.mode, audience: request.audience, targetWords: request.targetWords, ...(request.format ? { format: request.format, brainrot: request.brainrot ?? false, comicPanels: request.comicPanels ?? 6 } : {}) };
+    const workflow = request.format ?? (request.mode === "topic" ? "scratch" : "upload");
+    const job: LessonJob = { id: randomUUID(), createdAt: new Date().toISOString(), status: "writing", progress: 5, message: request.format === "comic" ? "Planning a comic, one clear idea per panel…" : "Writing a story worth listening to…", demo: false, workflow, recipe: { mode: request.mode, audience: request.audience, targetWords: request.targetWords }, sourceText: request.text, settings: formatSettings(workflow, { ...DEFAULT_SETTINGS, brainrot: request.brainrot ?? false }), outputs: [] };
     this.jobs.set(job.id, job); this.requests.set(job.id, clean);
     if (request.mode === "script") {
       job.result = parseNarration(request.text);
@@ -119,10 +122,12 @@ export class ProductionService {
   private scriptReady(job: LessonJob) {
     job.status = "script-ready"; job.progress = 30;
     job.message = !job.result?.chunks.some(c => c.renderHint === "image") ? "Your narration is saved. Add a Groq key to plan illustrations before making the final video." : "Your script and visual plan are saved. Choose a look, review the scenes, and generate the illustrations.";
+    if (job.workflow === "comic") job.message = "Your comic storyboard is saved. Review the captions and scene ideas, then illustrate each panel.";
   }
   private async writeScript(job: LessonJob, key: string, signal: AbortSignal) {
     const request = this.requests.get(job.id)!;
-    job.result = await this.generate(request.text, { provider: "groq", apiKey: key, planVisuals: true, inputMode: request.mode === "topic" ? "topic" : "material", audience: request.audience, targetWords: request.targetWords });
+    job.result = await this.generate(request.text, { provider: "groq", apiKey: key, planVisuals: true, ...(request.format === "comic" ? { comicPanels: request.comicPanels ?? 6 } : {}), inputMode: request.mode === "topic" ? "topic" : "material", audience: request.audience, targetWords: request.targetWords });
+    signal.throwIfAborted();
     if (imageTimeShare(job.result.chunks) < MIN_PLANNED_IMAGE_SHARE) {
       job.status = "planning"; job.message = "Your script is saved. Adding more relevant illustrations before continuing…";
       this.save(job);
@@ -130,7 +135,7 @@ export class ProductionService {
     }
     this.scriptReady(job);
   }
-  private run(job: LessonJob, stage: "script" | "plan" | "images" | "video", work: (signal: AbortSignal) => Promise<void>) {
+  private run(job: LessonJob, stage: "script" | "plan" | "images" | "video" | "comic", work: (signal: AbortSignal) => Promise<void>) {
     const controller = new AbortController(); this.controllers.set(job.id, controller);
     delete job.error; delete job.failedStage;
     const task = (async () => {
@@ -151,7 +156,7 @@ export class ProductionService {
   }
   async advance(id: string, stage: string, input: StageRequest): Promise<LessonJob> {
     const job = this.jobs.get(id); if (!job) throw new RequestError("Lesson not found.", 404);
-    if (running(job)) throw new RequestError("Wait for this stage to finish or stop it first.", 409);
+    if (running(job) || this.controllers.has(id)) throw new RequestError("Wait for this stage to finish or stop it first.", 409);
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new RequestError("Send stage settings as JSON.");
     if (stage === "script") {
       this.checkCapacity();
@@ -160,10 +165,28 @@ export class ProductionService {
       this.save(job); this.run(job, "script", async signal => this.writeScript(job, key, signal)); return job;
     }
     if (!job.result) throw new RequestError("Generate the script first.", 409);
+    if (job.workflow === "comic" && ["video", "plan"].includes(stage)) throw new RequestError("Use the comic storyboard and assemble-page steps for this lesson.");
+    if (stage === "comic") {
+      if (job.workflow !== "comic" || !job.result.comic) throw new RequestError("This lesson does not have a comic storyboard.");
+      this.checkCapacity();
+      if (!job.frames?.length || job.frames.some(f => !f.imageUrl) || job.frames.length !== job.result.chunks.length) throw new RequestError("Generate every panel before assembling the comic.", 409);
+      job.status = "rendering"; job.operation = "comic"; job.progress = 85; job.message = "Typesetting captions and assembling your comic page…";
+      this.save(job);
+      this.run(job, "comic", async signal => {
+        const bytes = await renderComic(job.result!, Object.fromEntries(job.frames!.map(f => [f.chunkIndex, join(this.folder(id), "frames", `${f.version}.png`)])));
+        signal.throwIfAborted();
+        const outputId = randomUUID(); mkdirSync(join(this.folder(id), "comics"), { recursive: true });
+        writeFileSync(join(this.folder(id), "comics", `${outputId}.png`), bytes);
+        job.comicUrl = `/api/lessons/${id}/assets/comics/${outputId}.png`;
+        (job.comicOutputs ??= []).push({ url: job.comicUrl, createdAt: new Date().toISOString(), panels: job.result!.chunks.map(c => ({ caption: c.text, imageUrl: job.frames!.find(f => f.chunkIndex === c.index)!.imageUrl! })) });
+        job.status = "complete"; job.progress = 100; job.message = "Your comic is ready to read and saved in My lessons.";
+      });
+      return job;
+    }
     if (stage === "plan") {
       this.checkCapacity();
       const key = requireKey(input.apiKey, "Groq");
-      const settings = validateSettings(input.settings ?? {}, job.settings);
+      const settings = formatSettings(job.workflow, validateSettings(input.settings ?? {}, job.settings));
       // Upgrade only the exact old house preset; leave custom art direction intact.
       if (settings.style === LEGACY_DOODLE_STYLE) settings.style = ART_STYLES.doodle;
       if (job.result.script.length > 10000) throw new RequestError("Start a shorter lesson before planning visuals (10,000 script characters maximum).");
@@ -179,7 +202,7 @@ export class ProductionService {
     }
     if (!["images", "video", "settings"].includes(stage)) throw new RequestError("Unknown production stage.");
     if (stage !== "settings" && (job.result.script.length > 10000 || job.result.chunks.length > 1000)) throw new RequestError("Video production supports up to 10,000 script characters and 1,000 chunks. Start a shorter lesson before spending image or voice credits.");
-    const settings = validateSettings(input.settings ?? {}, job.settings);
+    const settings = formatSettings(job.workflow, validateSettings(input.settings ?? {}, job.settings));
     const key = stage === "settings" ? "" : requireKey(input.apiKey, stage === "images" ? "Pollinations" : "ElevenLabs");
     if (input.count !== undefined && (!Number.isInteger(input.count) || input.count < 1 || input.count > 1000)) throw new RequestError("Choose 1–1,000 images, or all missing images.");
     if (input.audioOnly !== undefined && typeof input.audioOnly !== "boolean") throw new RequestError("Choose audio only or MP4.");
@@ -192,12 +215,14 @@ export class ProductionService {
     }
     // Recheck after asynchronous module loading to reject two simultaneous submissions.
     const helpers = await import(pathToFileURL(resolve(process.cwd(), "studio/lesson-images.mjs")).href);
-    if (running(job)) throw new RequestError("This lesson is already running.", 409);
+    if (running(job) || this.controllers.has(id)) throw new RequestError("This lesson is already running.", 409);
     if (stage !== "settings") this.checkCapacity();
     const frames = job.result.chunks.filter(c => c.renderHint === "image").map(chunk => {
       const override = prompts[String(chunk.index)];
       let prompt: string;
-      try { prompt = helpers.styledImagePrompt(job.result, { ...chunk, ...(override ? { imagePrompt: override } : {}) }, settings.style, settings.imageAspect) as string; }
+      try { prompt = job.result!.comic
+        ? `A single educational comic illustration.\nCONTINUITY: ${job.result!.comic.continuity}\nTHIS PANEL ONLY: ${override || job.result!.comic.panels[chunk.index]!.prompt}\nCOMPOSITION: 16:9 landscape. One action, clear spatial relationships, 10% safe margins. No text, letters, labels, speech bubbles, borders, or multiple panels.\nART DIRECTION: ${settings.style}`
+        : helpers.styledImagePrompt(job.result, { ...chunk, ...(override ? { imagePrompt: override } : {}) }, settings.style, settings.imageAspect) as string; }
       catch (error) { throw new RequestError(error instanceof Error ? error.message : "Please shorten the scene prompt or art direction."); }
       const selected = prompt;
       const seed = Number.parseInt(hash(`scene-v2:${job.result!.script}:${chunk.index}:${selected}`).slice(0, 8), 16) % 2147483647;
@@ -249,7 +274,7 @@ export class ProductionService {
         const failed = result.scenes.find(s => s.status !== "done");
         if (failed || result.stoppedReason) throw new Error(result.stoppedReason || failed?.error || "Some images could not finish. Continue to fill only the missing images.");
         job.status = frames.every(f => f.imageUrl) ? "images-ready" : "script-ready";
-        job.message = `${frames.filter(f => f.imageUrl).length} of ${frames.length} images saved. ${job.status === "images-ready" ? "Add your ElevenLabs key for the final cut." : "Generate the remaining images when ready."}`;
+        job.message = `${frames.filter(f => f.imageUrl).length} of ${frames.length} images saved. ${job.status === "images-ready" ? job.workflow === "comic" ? "Review your panels, then assemble the comic page." : "Add your ElevenLabs key for the final cut." : "Generate the remaining images when ready."}`;
       } else {
         const voice = await engine.synthesizeNarration(job.result!.script, { apiKey: key, voiceId: settings.voiceId, model: settings.model, cacheDir: join(this.folder(id), "voice-cache"), signal });
         const outputId = randomUUID(), outputDir = join(this.folder(id), "videos", outputId);
@@ -265,12 +290,13 @@ export class ProductionService {
           await engine.renderVideo({ lesson: job.result!, alignment: voice.alignment, audioPath: voice.audioPath,
             mapping: Object.fromEntries(frames.filter(f => f.imageUrl).map(f => [f.chunkIndex, join(this.folder(id), "frames", `${f.version}.png`)])),
             fallbackText: settings.fallbackText, requireImageMajority: !settings.fallbackText, artStyle: settings.style, textStyle: settings.textStyle, ...DIMENSIONS[settings.videoAspect], outputDir, signal,
+            brainrot: settings.brainrot, captions: job.workflow === "short", ...(job.gameplayClip ? { gameplayPath: this.assetPath(id, job.gameplayClip) } : {}),
             onProgress: message => { job.message = message; },
           });
           job.videoUrl = `${prefix}/video.mp4`; job.timelineUrl = `${prefix}/timeline.json`;
         }
         job.outputs ??= [];
-        job.outputs.push({ audioUrl: job.audioUrl, ...(!input.audioOnly ? { videoUrl: job.videoUrl!, timelineUrl: job.timelineUrl! } : {}), createdAt: new Date().toISOString(), label: `${!input.audioOnly && settings.fallbackText ? "Text fallback preview · " : ""}${settings.videoAspect} · ${settings.model}${voice.cached ? " · saved voice reused" : ""}` });
+        job.outputs.push({ audioUrl: job.audioUrl, ...(!input.audioOnly ? { videoUrl: job.videoUrl!, timelineUrl: job.timelineUrl! } : {}), createdAt: new Date().toISOString(), label: `${settings.brainrot ? job.gameplayClip ? "Split screen · uploaded gameplay · " : "Split screen · runner placeholder · " : ""}${!input.audioOnly && settings.fallbackText ? "Text fallback preview · " : ""}${settings.videoAspect} · ${settings.model}${voice.cached ? " · saved voice reused" : ""}` });
         job.status = input.audioOnly ? "audio-ready" : "complete"; job.progress = input.audioOnly ? 80 : 100;
         job.message = input.audioOnly ? "Voiceover saved. Create the MP4 next; this voice will be reused." : "That’s a wrap! Your video, source text, and script are saved in My lessons.";
       }
@@ -279,7 +305,23 @@ export class ProductionService {
   }
   assetPath(id: string, asset: string) {
     if (!this.jobs.has(id)) throw new RequestError("Lesson not found.", 404);
-    if (!/^(frames\/[a-f0-9]{64}\.png|videos\/[a-f0-9-]{36}\/(video\.mp4|narration\.mp3|timeline\.json))$/.test(asset)) throw new RequestError("Asset not found.", 404);
+    if (!/^(frames\/[a-f0-9]{64}\.png|comics\/[a-f0-9-]{36}\.png|clips\/[a-f0-9-]{36}\.mp4|videos\/[a-f0-9-]{36}\/(video\.mp4|narration\.mp3|timeline\.json))$/.test(asset)) throw new RequestError("Asset not found.", 404);
     return join(this.folder(id), asset);
+  }
+  async uploadGameplay(id: string, bytes: Buffer): Promise<LessonJob> {
+    const job = this.jobs.get(id);
+    if (!job) throw new RequestError("Lesson not found.", 404);
+    if (job.workflow !== "short") throw new RequestError("Gameplay clips belong to Short-form lessons.");
+    if (running(job) || this.controllers.has(id)) throw new RequestError("Wait for the current stage to finish before replacing the clip.", 409);
+    this.checkCapacity();
+    const controller = new AbortController(); this.controllers.set(id, controller);
+    const asset = `clips/${randomUUID()}.mp4`, file = join(this.folder(id), asset);
+    mkdirSync(join(this.folder(id), "clips"), { recursive: true }); writeFileSync(file, bytes);
+    try {
+      const video = await import(pathToFileURL(resolve(process.cwd(), "studio/video.mjs")).href);
+      await video.runFfmpeg(["-protocol_whitelist", "file,pipe", "-i", file, "-map", "0:v:0", "-t", "0.1", "-f", "null", "-"], { cwd: this.folder(id), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]) });
+      job.gameplayClip = asset; this.save(job); return job;
+    } catch { await rm(file, { force: true }); throw new RequestError("That clip could not be read. Upload a playable MP4 under 100 MB."); }
+    finally { this.controllers.delete(id); }
   }
 }

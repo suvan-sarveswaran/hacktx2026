@@ -18,7 +18,15 @@ export const IMAGE_MODELS = {
   "openai/gpt-image-1-mini": "GPT Image 1 Mini · alternative",
 };
 export const DEFAULT_SETTINGS: ProductionSettings = {
+  brainrot: false,
   imageModel: "black-forest-labs/flux.1-schnell", textStyle: "auto",
   style: ART_STYLES.doodle, imageAspect: "landscape", videoAspect: "landscape",
   voiceId: "JBFqnCBsd6RMkjVDRZzb", model: "eleven_flash_v2_5", fallbackText: false,
 };
+
+export function formatSettings(workflow: string | undefined, settings: ProductionSettings): ProductionSettings {
+  if (workflow === "youtube") return { ...settings, brainrot: false, imageAspect: "landscape", videoAspect: "landscape" };
+  if (workflow === "short") return { ...settings, imageAspect: settings.brainrot ? "square" : "portrait", videoAspect: "portrait" };
+  if (workflow === "comic") return { ...settings, brainrot: false, imageAspect: "landscape", videoAspect: "landscape" };
+  return settings;
+}

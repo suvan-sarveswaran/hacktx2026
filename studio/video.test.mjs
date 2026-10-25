@@ -109,3 +109,37 @@ test('real FFmpeg MP4 has 60 frames with exact red → text → blue cut frames'
   else assert.ok(b>180&&r<100&&g<100,`expected blue at frame ${i}`);
  }
 });
+
+test('short-form exports portrait video with captions, a looping silent lower clip, and full-screen mode', async t => {
+ const dir=await mkdtemp(path.join(tmpdir(),'entertainify-short-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const lesson=lessonOf(['A red leaf.']);const alignment=alignmentOf(lesson.script,.08);
+ const audioPath=path.join(dir,'input.wav');await writeFile(audioPath,wav(2));
+ await runFfmpeg(['-f','lavfi','-i','color=c=red:s=720x640:d=1','-frames:v','1','red.png'],{cwd:dir});
+ await runFfmpeg(['-f','lavfi','-i','color=c=blue:s=320x240:d=0.4','-c:v','libx264','-pix_fmt','yuv420p','clip.mp4'],{cwd:dir});
+ const options={lesson,alignment,audioPath,mapping:{0:path.join(dir,'red.png')},width:720,height:1280,captions:true};
+ for(const brainrot of [false,true]) {
+  const outputDir=path.join(dir,brainrot?'split':'full');
+  const rendered=await renderVideo({...options,brainrot,gameplayPath:path.join(dir,'clip.mp4'),outputDir});
+  await runFfmpeg(['-sseof','-0.2','-i','video.mp4','-frames:v','1','last.png'],{cwd:outputDir});
+  const image=await loadImage(await readFile(path.join(outputDir,'last.png')));assert.equal(image.width,720);assert.equal(image.height,1280);
+  const canvas=createCanvas(720,1280),ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
+  const top=ctx.getImageData(360,320,1,1).data; assert.ok(top[0]>180 && top[2]<80);
+  const bottom=ctx.getImageData(360,1100,1,1).data;
+  if(brainrot) assert.ok(bottom[2]>180 && bottom[0]<80,'lower clip loops beyond its original duration');
+  else assert.ok(bottom[0]>180 && bottom[1]>180,'full screen includes the caption area');
+  assert.equal(rendered.timeline.layout.visualHeight,brainrot?640:1280);
+ }
+});
+
+test('default split-screen runner is animated and renders without an external clip', async t => {
+ const dir=await mkdtemp(path.join(tmpdir(),'entertainify-placeholder-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const lesson=lessonOf(['A leaf.']);const audioPath=path.join(dir,'input.wav');await writeFile(audioPath,wav(2));
+ const rendered=await renderVideo({lesson,alignment:alignmentOf(lesson.script,.1),audioPath,fallbackText:true,width:720,height:1280,brainrot:true,captions:true,outputDir:dir});
+ assert.equal(rendered.timeline.layout.gameplay,'placeholder');
+ await runFfmpeg(['-i','video.mp4','-map','0:v:0','-vf','crop=720:640:0:640','-f','framemd5','runner.md5'],{cwd:dir});
+ const hashes=(await readFile(path.join(dir,'runner.md5'),'utf8')).split('\n').filter(l=>l&&!l.startsWith('#')).map(l=>l.split(',').at(-1).trim());
+ assert.equal(hashes.length,60);assert.ok(new Set(hashes).size>10);
+ await runFfmpeg(['-i','video.mp4','-vn','-ac','1','-ar','48000','-c:a','pcm_s16le','decoded.wav'],{cwd:dir});
+ assert.ok(Math.abs(wavDuration(await readFile(path.join(dir,'decoded.wav')))-2)<.06,'narration is not truncated');
+ if(process.env.SAVE_FORMAT_QA) { const { mkdir, copyFile }=await import('node:fs/promises'); await mkdir('output/format-qa',{recursive:true}); await copyFile(rendered.file,'output/format-qa/short.mp4'); await runFfmpeg(['-ss','1','-i','video.mp4','-frames:v','1','preview.png'],{cwd:dir});await copyFile(path.join(dir,'preview.png'),'output/format-qa/short.png'); }
+});

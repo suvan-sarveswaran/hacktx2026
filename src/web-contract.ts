@@ -2,9 +2,14 @@ import type { PipelineResult } from "./pipeline.js";
 
 /** Shared browser/server contract. PipelineResult is passed unchanged to the renderer. */
 export type LessonStatus = "writing" | "planning" | "images" | "voice" | "rendering" | "script-ready" | "images-ready" | "audio-ready" | "complete" | "failed";
-export type Workflow = "upload" | "scratch";
+export type LessonFormat = "youtube" | "short" | "comic";
+/** Older saved lessons retain their original workflow. */
+export type Workflow = LessonFormat | "upload" | "scratch";
 export type LessonSummary = Pick<LessonJob, "id" | "createdAt" | "demo" | "status" | "workflow"> & { title: string };
 export interface LessonRequest {
+  format?: LessonFormat;
+  brainrot?: boolean;
+  comicPanels?: 4 | 6 | 8;
   text: string;
   mode: "material" | "topic" | "script";
   audience: string;
@@ -21,7 +26,10 @@ export interface LessonJob {
   demo: boolean;
   workflow?: Workflow;
   recipe?: Pick<LessonRequest, "mode" | "audience" | "targetWords">;
-  operation?: "audio" | "video";
+  operation?: "audio" | "video" | "comic";
+  comicUrl?: string;
+  comicOutputs?: { url: string; createdAt: string; panels?: { imageUrl: string; caption: string }[] }[];
+  gameplayClip?: string;
   result?: PipelineResult;
   videoUrl?: string;
   error?: string;
@@ -30,12 +38,13 @@ export interface LessonJob {
   frames?: LessonFrame[];
   audioUrl?: string;
   timelineUrl?: string;
-  failedStage?: "script" | "plan" | "images" | "video";
+  failedStage?: "script" | "plan" | "images" | "video" | "comic";
   outputs?: SavedOutput[];
   scenePrompts?: Record<string, string>;
 }
 export type Aspect = "landscape" | "square" | "portrait";
 export interface ProductionSettings {
+  brainrot: boolean;
   imageModel: string;
   textStyle: "auto" | "doodle" | "vector" | "pencil" | "cinematic";
   style: string;

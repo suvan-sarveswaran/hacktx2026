@@ -14,10 +14,14 @@ With dependencies already installed, you can start directly without a package ma
 node --env-file-if-exists=.env --import tsx src/server.ts --dev
 ```
 
-1. Upload PDF/text or paste material. Enter or upload a **Groq API key** to write the script. Existing narration can skip writing.
-2. Choose doodles, editorial vector, colored pencil, cinematic, or custom art direction; choose landscape, square, or portrait. Enter a **Pollinations API key**, then generate one, a few, or all missing images. Scene counts, saved previews, and editable prompts are shown before proceeding.
-3. Enter an **ElevenLabs API key**. Select a voice (or load available voices), Flash v2.5 or Multilingual v2, and an output format. Generate audio only or create the MP4. Optional text fallback supports partial test videos.
-4. Watch the finished video in the same screen. **My lessons** restores the source, script, settings, images, narration, and video versions after browser/server restarts.
+1. Pick **YouTube Video**, **Short-form**, or **Comic Book**. Each has an independent draft, input, production job, and current lesson. Upload PDF/TXT/MD to use extracted source material, or type a prompt to create a story from scratch. Pasted notes have their own source-text option.
+2. Add a **Groq API key** to write the script or comic storyboard. Review the story and choose an art direction, then use **Pollinations** to illustrate one, a few, or all missing scenes.
+3. **YouTube Video** uses fixed 16:9 output (1280 × 720). **Short-form** uses fixed 9:16 output (720 × 1280), with locally drawn narration captions. Add **ElevenLabs** for narration and the final MP4.
+4. Short-form's optional **brainrot clip** places the lesson in the top 720 × 640 region and loops silent gameplay in the bottom half. The default is an original, labeled runner placeholder. In the final-cut step, upload a playable **MP4 under 100 MB** to replace it with your own Subway Surfers gameplay. Clip audio is excluded. Turning the option off restores full-screen visuals. Changing the layout selects appropriately shaped image versions.
+5. **Comic Book** uses a dedicated 4-, 6-, or 8-panel storyboard with shared visual continuity and one action per picture. Captions are typeset locally, avoiding generated lettering and ambiguous speech bubbles. Review the illustrations, edit a scene prompt if needed, and select **Assemble comic page**. No ElevenLabs key is needed. Read the 1600-pixel-wide page with zoom or switch to panel-by-panel reading; download the PNG or reopen older editions.
+6. **My lessons** keeps all three formats, their sources, settings, image versions, and finished outputs across browser/server restarts. Old upload/topic lessons remain available as YouTube projects.
+
+Comics use one structured Groq storyboard call and one Pollinations request per uncached panel. They do not require reference-image APIs or an additional provider. Prompt continuity improves consistency but cannot guarantee model quality: inspect the captions and artwork before assembling. The automated tests mock providers and verify local rendering; live results depend on your keys, model access, quota, and the provider's output.
 
 Keys are used only for their requested operation and are never written to project files or browser storage. No second UI or manual JSON handoff is required. The old screens are preserved in [`studio/archive/public/`](studio/archive/README.md); `pnpm studio` explicitly opens the archived app and its existing `studio/data/` projects.
 
@@ -51,8 +55,8 @@ Open **http://127.0.0.1:3000**. On PowerShell, use `npm.cmd` if needed. Both the
 
 - **Upload material:** choose or drop a `.pdf`, UTF-8 `.txt` / `.md` file, or paste course material. PDFs become editable source text first; Groq writes narration, per-scene image prompts, and text-card captions together.
 - **Existing narration:** check “I already have a narration script” to keep the original words as readable text cards with no AI request. Use **Replan visuals** to add Groq-directed illustrations later.
-- **From scratch:** describe a topic and choose an audience and approximate runtime, including a 30-second story (75 words). Upload and topic workflows have separate drafts and current lessons.
-- **Coming-soon widget:** the former sample panel is an independent placeholder with no generation or API behavior. Old sample records are retired from the library on server startup into `output/lessons/.retired-samples/`, preserving their files.
+- **From scratch:** describe a topic and choose an audience and approximate runtime, including a 30-second story (75 words). Each format has its own draft and current lesson.
+- **Three formats:** YouTube Video, Short-form, and Comic Book each keep separate drafts and selections. Old sample records remain retired in `output/lessons/.retired-samples/`.
 - **Results:** one lesson player shows narration/rendering progress, then the finished video with browser playback and downloads. Saved-version Watch/Listen controls focus that same player and start playback. Audio appears separately only for an explicitly generated audio-only version.
 - **My lessons:** only started lessons appear, including recoverable failures. Start another lesson at any stage and reopen any earlier one from history. Production continues independently on the server. Source, recipe, script, settings, images and output versions survive restarts. Per-workflow drafts/selections and per-lesson unfinished settings/prompt edits stay in local browser storage; API keys do not.
 

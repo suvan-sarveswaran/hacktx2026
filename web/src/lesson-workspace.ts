@@ -2,7 +2,7 @@ import type { LessonJob, LessonRequest, LessonSummary, Workflow } from "../../sr
 
 export const isProducing = (job: Pick<LessonJob, "status">) => ["writing", "planning", "images", "voice", "rendering"].includes(job.status);
 export const workflowOf = (job: Pick<LessonJob, "workflow" | "recipe">): Workflow => job.workflow ?? (job.recipe?.mode === "topic" ? "scratch" : "upload");
-export const statusLabel = (status: LessonJob["status"]) => ({ writing: "Writing script", planning: "Planning visuals", images: "Generating images", voice: "Recording narration", rendering: "Rendering video", "script-ready": "Continue with illustrations", "images-ready": "Continue with voice + video", "audio-ready": "Voiceover ready · continue to video", complete: "Video ready · watch", failed: "Needs attention · resume" })[status];
+export const statusLabel = (status: LessonJob["status"], workflow?: Workflow) => workflow === "comic" ? ({ writing: "Planning comic", planning: "Planning panels", images: "Illustrating panels", voice: "Preparing lesson", rendering: "Assembling page", "script-ready": "Continue with illustrations", "images-ready": "Ready to assemble page", "audio-ready": "Continue lesson", complete: "Comic ready · read", failed: "Needs attention · resume" })[status] : ({ writing: "Writing script", planning: "Planning visuals", images: "Generating images", voice: "Recording narration", rendering: "Rendering video", "script-ready": "Continue with illustrations", "images-ready": "Continue with voice + video", "audio-ready": "Voiceover ready · continue to video", complete: "Ready · open lesson", failed: "Needs attention · resume" })[status];
 
 interface WorkspaceApi {
   create(request: LessonRequest): Promise<LessonJob>;
@@ -23,16 +23,16 @@ interface Snapshot {
 
 /** Selection is per workflow; asynchronous results are always committed by lesson ID. */
 export class LessonWorkspace {
-  private state: Snapshot = { jobs: {}, selected: { upload: null, scratch: null }, busy: { upload: false, scratch: false }, errors: { upload: "", scratch: "" }, jobErrors: {}, recent: [], libraryError: "", libraryLoading: true };
+  private state: Snapshot = { jobs: {}, selected: { youtube: null, short: null, comic: null, upload: null, scratch: null }, busy: { youtube: false, short: false, comic: false, upload: false, scratch: false }, errors: { youtube: "", short: "", comic: "", upload: "", scratch: "" }, jobErrors: {}, recent: [], libraryError: "", libraryLoading: true };
   private listeners = new Set<() => void>();
   private revisions = new Map<string, number>();
-  private selectionRevision = { upload: 0, scratch: 0 };
+  private selectionRevision = { youtube: 0, short: 0, comic: 0, upload: 0, scratch: 0 };
   private listing = false;
   private refreshing = new Set<string>();
   constructor(private api: WorkspaceApi, private storage?: SelectionStorage) {
     try {
       const selected = JSON.parse(storage?.getItem("entertainify-workflows") ?? "{}");
-      for (const kind of ["upload", "scratch"] as const) if (typeof selected?.[kind] === "string" && /^[a-f0-9-]{36}$/.test(selected[kind])) this.state.selected[kind] = selected[kind];
+      for (const kind of ["youtube", "short", "comic", "upload", "scratch"] as const) if (typeof selected?.[kind] === "string" && /^[a-f0-9-]{36}$/.test(selected[kind])) this.state.selected[kind] = selected[kind];
     } catch { /* Browser storage is optional. */ }
   }
   snapshot = () => this.state;
@@ -73,7 +73,7 @@ export class LessonWorkspace {
       // A stage action may have returned newer progress while this read was in flight.
       if (this.revisions.get(id) === revision) {
         if (job.demo) {
-          for (const kind of ["upload", "scratch"] as const) if (this.state.selected[kind] === id) this.select(kind, null);
+          for (const kind of ["youtube", "short", "comic", "upload", "scratch"] as const) if (this.state.selected[kind] === id) this.select(kind, null);
         } else this.update(job);
       }
     } catch (error) {
